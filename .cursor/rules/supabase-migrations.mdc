@@ -1,0 +1,29 @@
+---
+description: Supabase migration file naming and ordering conventions
+globs: supabase/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Supabase migration isimlendirme
+
+Yeni migration dosyaları şu formatta olmalı:
+
+`yyyyMMddHHmmss_NNN_snake_case_aciklama.sql`
+
+- **yyyyMMddHHmmss**: Dosyanın oluşturulduğu gerçek tarih ve saat (yerel saat). Placeholder saat (ör. `120000`) kullanma.
+- **NNN**: Sıra numarası (`001`, `002`, …) — mevcut en yüksek numaradan bir sonraki.
+- **snake_case_aciklama**: Kısa, İngilizce açıklama (`seed_group_matches` gibi).
+
+## Oluştururken
+
+1. Mevcut migration listesine bak; bir sonraki `NNN` değerini belirle.
+2. Zaman damgasını gerçek oluşturma anından al (`date +%Y%m%d%H%M%S` veya eşdeğeri).
+3. Aynı saniyede birden fazla dosya oluşursa sıra numarası (`NNN`) dosya sıralamasını garanti eder.
+
+## Örnek
+
+`20260604191213_008_seed_group_matches.sql`
+
+## Uygulama
+
+Migration'lar Supabase SQL Editor'da dosya adı sırasına göre çalıştırılır. Zaman damgası gerçek oluşturma anını yansıtmalı; uydurma veya kopyalanmış saat kullanma.

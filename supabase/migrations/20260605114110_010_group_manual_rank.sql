@@ -1,0 +1,2 @@
+ALTER TABLE group_standings
+  ADD COLUMN rank_is_manual BOOLEAN NOT NULL DEFAULT FALSE;
