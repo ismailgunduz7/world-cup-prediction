@@ -321,7 +321,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
           <Card v-if="bestThirds?.isComputed" class="best-thirds-card mt-3">
             <template #title>
               <div class="group-card-header">
-                <span>En İyi 3.ler — Son 32'ye Katılan 8 Takım</span>
+                <span>En İyi 3.ler</span>
                 <Tag :value="`${bestThirds.advancingCount}/8`" severity="success" />
               </div>
             </template>

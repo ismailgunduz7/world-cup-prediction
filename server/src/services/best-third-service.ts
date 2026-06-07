@@ -197,7 +197,7 @@ export async function getBestThirdSummary(): Promise<BestThirdSummary> {
   const rows = (stored ?? []).map((row) => {
     const candidate = candidateMap.get(row.team_id);
     if (!candidate) {
-      throw new Error('En iyi 3.ler tablosu güncel değil — yeniden hesaplayın');
+      throw new Error('En iyi 3.ler tablosu güncel değil. Yeniden hesaplayın');
     }
     return mapCandidateToRow(candidate, row.global_rank, row.is_advancing);
   });

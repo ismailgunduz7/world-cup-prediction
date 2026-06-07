@@ -55,7 +55,6 @@ onMounted(async () => {
     <template v-if="phase === 1">
       <PageHeader
         title="Turnuva Rehberi"
-        subtitle="Tierlar, gruplar ve takımlar — seçim yapmadan önce inceleyin"
       />
 
       <CountdownBanner
@@ -74,7 +73,7 @@ onMounted(async () => {
 
     <!-- Faz 2: Kilitli, başlamadı -->
     <template v-else-if="phase === 2">
-      <PageHeader title="Kadron hazır" subtitle="Seçimler kilitlendi — turnuva başlamak üzere" />
+      <PageHeader title="Kadron hazır" />
 
       <CountdownBanner
         :target-at="dashboard.status.tournamentStartAt"

@@ -226,7 +226,7 @@ const knockoutTeamsHint = computed(() => {
   if (newMatch.value.stage === 'third_place') {
     return '3.lük maçı için yarı final maçları bitmiş olmalı.';
   }
-  return 'Bu tur için uygun takım yok — önceki tur maçları tamamlanmamış veya takımlar elenmiş olabilir.';
+  return 'Bu tur için uygun takım yok. Önceki tur maçları tamamlanmamış veya takımlar elenmiş olabilir.';
 });
 
 function teamToOption(t: TeamOption) {
@@ -1757,7 +1757,7 @@ function isSelf(userId: string) {
                 </DataTable>
 
                 <div v-else class="text-muted">
-                  Henüz hesaplanmadı — otomatik hesapla veya tüm grupları finalize edin.
+                  Henüz hesaplanmadı. Otomatik hesapla veya tüm grupları finalize edin.
                 </div>
 
                 <div v-if="bestThirds?.isComputed" class="group-card-actions">

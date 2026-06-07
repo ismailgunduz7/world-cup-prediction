@@ -128,8 +128,8 @@ async function save() {
       title="Takım Seçimi"
       :subtitle="
         selectionsLocked
-          ? 'Seçimleriniz kilitlendi — seçtiğiniz takımlar aşağıda'
-          : 'Turnuvadan 3 ülke seç — kilitlenene kadar değiştirebilirsin'
+          ? 'Seçimleriniz kilitlendi'
+          : 'Turnuvadan 3 ülke seç'
       "
     />
 

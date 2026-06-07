@@ -259,7 +259,7 @@ async function assignRandomSelections(dryRun: boolean) {
   if (teamError) throw teamError;
 
   if (!users?.length) {
-    console.log('Katılımcı kullanıcı bulunamadı — seçim atlanıyor.');
+    console.log('Katılımcı kullanıcı bulunamadı. Seçim atlanıyor.');
     return;
   }
 
@@ -540,7 +540,7 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
 
   if (opts.dryRun) {
-    console.log('DRY RUN — veritabanına yazılmayacak\n');
+    console.log('DRY RUN: Veritabanına yazılmayacak\n');
   }
 
   if (opts.realistic) {
@@ -597,7 +597,7 @@ async function main() {
       }
       await finalizeAllGroups(opts.dryRun);
     } else {
-      console.warn('\nMaç haftası 3 henüz bitmedi — grup finalize atlandı.');
+      console.warn('\nMaç haftası 3 henüz bitmedi. Grup finalize atlandı.');
     }
   } else if (opts.matchdays.includes(3) && opts.skipFinalize) {
     console.log('\n--skip-finalize: grup sıralamaları finalize edilmedi.');
