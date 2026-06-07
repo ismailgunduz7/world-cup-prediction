@@ -11,6 +11,7 @@ import groupRoutes from './routes/groups.js';
 import scoringRulesRoutes from './routes/scoring-rules.js';
 import adminRoutes from './routes/admin.js';
 import meRoutes from './routes/me.js';
+import bracketRoutes from './routes/bracket.js';
 import { getSelectionLockAt, hasTournamentStarted, areSelectionsLocked } from './services/tournament-config.js';
 
 const app = new Hono();
@@ -34,6 +35,7 @@ app.route('/api/leaderboard', leaderboardRoutes);
 app.route('/api/players', playerRoutes);
 app.route('/api/groups', groupRoutes);
 app.route('/api/scoring-rules', scoringRulesRoutes);
+app.route('/api/bracket', bracketRoutes);
 app.route(`/api/admin/${config.adminPath}`, adminRoutes);
 
 app.get('/api/tournament/status', async (c) => {

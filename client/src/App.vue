@@ -48,6 +48,7 @@ const navItems = [
   { to: '/', label: 'Ana Sayfa', icon: 'pi pi-home' },
   { to: '/secimlerim', label: 'Seçimlerim', icon: 'pi pi-check-square' },
   { to: '/puan-durumu', label: 'Puan Durumu', icon: 'pi pi-chart-bar' },
+  { to: '/bracket', label: 'Bracket', icon: 'pi pi-sitemap' },
   { to: '/kurallar', label: 'Kurallar', icon: 'pi pi-list' },
 ];
 

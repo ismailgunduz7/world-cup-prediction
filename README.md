@@ -12,6 +12,7 @@
 - [Ortam Değişkenleri](#ortam-değişkenleri)
 - [Veritabanı Migrasyonları](#veritabanı-migrasyonları)
 - [Ana Sayfa (Katılımcı)](#ana-sayfa-katılımcı)
+- [Bracket Tahmini](#bracket-tahmini)
 - [Geliştirme](#geliştirme)
 - [Puanlama Sistemi](#puanlama-sistemi)
 - [Turnuva Akışı](#turnuva-akışı)
@@ -28,6 +29,7 @@
 
 - JWT tabanlı kimlik doğrulama (bellekte access token + httpOnly cookie’de refresh token, rotation, “beni hatırla” desteği)
 - **Faz-duyarlı ana sayfa** (turnuva durumuna göre rehber, kadro özeti veya kişisel panel)
+- **Bracket tahmin kum havuzu** (grup sıralaması + en iyi 8 üçüncü → eleme ağacı; kaydedilmez, puanları etkilemez)
 - 3 takım seçimi (kilit tarihinden önce)
 - Canlı puan durumu ve sıralama tablosu
 - Oyuncu detay sayfası (puan kırılımı)
@@ -245,6 +247,20 @@ Seçimi olmayan kullanıcı Faz 3’te boş-durum mesajı görür; sayfa çökme
 
 ---
 
+## Bracket Tahmini
+
+`/bracket` sayfası, katılımcıların **skorlardan tamamen bağımsız** bir eleme ağacı kurabildiği bir kum havuzudur. Hiçbir veri veritabanına yazılmaz, puan durumunu **etkilemez** ve turnuva durumundan bağımsız olarak her zaman kullanılabilir.
+
+Akış (3 adım):
+
+1. **Grup sıralamaları** — her grupta 4 takım sürükle-bırak ya da ok tuşlarıyla sıralanır (3. sıradaki takım üçüncülük adayı olur).
+2. **En iyi 8 üçüncü** — 12 grup üçüncüsü arasından tur atlayacak 8 tanesi seçilir.
+3. **Eleme ağacı** — Son 32’den finale kadar eşleşmeler oluşturulur; kullanıcı her maçta kazananı seçerek bir sonraki turu doldurur ve tahmini şampiyonu belirler.
+
+Son 32 eşleşmeleri ve üçüncülük slot atamaları (`3@…`) resmî FIFA 2026 kombinasyon tablosuna göre sunucuda çözülür (`POST /api/bracket/preview` — salt-okunur, stateless). Eşleşme şablonu ve 495 satırlık kombinasyon tablosu tek kaynak olarak sunucuda tutulur; kazanan ilerletme mantığı (`W{n}`/`L{n}` slotları) istemcide hesaplanır. Arayüz mobil uyumludur: masaüstünde turlar yatay sütunlar, mobilde dikey istiflenir.
+
+---
+
 ## Geliştirme
 
 ```bash
@@ -444,6 +460,7 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | GET     | `/teams/:id`          | Takım maçları ve puanları |
 | GET     | `/groups`             | Grup puan durumları       |
 | GET     | `/groups/best-thirds` | En iyi 3.ler sıralaması   |
+| POST    | `/bracket/preview`    | Bracket tahmin önizlemesi (stateless, salt-okunur) |
 | GET     | `/scoring-rules`      | Aktif puan kuralları      |
 
 ### Admin (seçilmiş)

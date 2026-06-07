@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { requiresAuth: true, participantOnly: true },
     },
     {
+      path: '/bracket',
+      name: 'bracket',
+      component: () => import('@/views/BracketPredictorView.vue'),
+      meta: { requiresAuth: true, participantOnly: true },
+    },
+    {
       path: '/hesap',
       name: 'account',
       component: () => import('@/views/AccountView.vue'),
