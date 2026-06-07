@@ -9,6 +9,8 @@ declare module '*.vue' {
 interface ImportMetaEnv {
   readonly VITE_ADMIN_PATH: string;
   readonly VITE_REMEMBER_ME_DAYS: string;
+  readonly VITE_API_PROXY_TARGET?: string;
+  readonly VITE_API_URL?: string;
 }
 
 interface ImportMeta {

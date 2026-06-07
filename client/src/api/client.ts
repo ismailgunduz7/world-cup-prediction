@@ -1,7 +1,10 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
+/** Dev: `/api` (Vite proxy). Prod: `VITE_API_URL` ile tam backend adresi. */
+export const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
   // Send the httpOnly refresh-token cookie with requests.
   withCredentials: true,
@@ -61,7 +64,7 @@ api.interceptors.response.use(
 
     try {
       // The refresh token rides along as an httpOnly cookie.
-      const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+      const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true });
       setAccessToken(data.accessToken);
       pendingRequests.forEach((cb) => cb.resolve(data.accessToken));
       pendingRequests = [];
