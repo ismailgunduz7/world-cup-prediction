@@ -11,6 +11,7 @@
 - [Kurulum](#kurulum)
 - [Ortam Değişkenleri](#ortam-değişkenleri)
 - [Veritabanı Migrasyonları](#veritabanı-migrasyonları)
+- [Ana Sayfa (Katılımcı)](#ana-sayfa-katılımcı)
 - [Geliştirme](#geliştirme)
 - [Puanlama Sistemi](#puanlama-sistemi)
 - [Turnuva Akışı](#turnuva-akışı)
@@ -26,6 +27,7 @@
 ### Katılımcı tarafı
 
 - JWT tabanlı kimlik doğrulama (bellekte access token + httpOnly cookie’de refresh token, rotation, “beni hatırla” desteği)
+- **Faz-duyarlı ana sayfa** (turnuva durumuna göre rehber, kadro özeti veya kişisel panel)
 - 3 takım seçimi (kilit tarihinden önce)
 - Canlı puan durumu ve sıralama tablosu
 - Oyuncu detay sayfası (puan kırılımı)
@@ -74,6 +76,7 @@ world-cup-prediction/
 ├── client/                 # Vue 3 SPA
 │   └── src/
 │       ├── views/          # Sayfa bileşenleri (Home, Leaderboard, Admin, …)
+│       ├── components/     # Ortak bileşenler (dashboard/, TournamentGuide, …)
 │       ├── stores/         # Pinia store’ları
 │       ├── api/            # Axios istemcisi
 │       └── router/         # Vue Router tanımları
@@ -222,6 +225,23 @@ yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 | 010 | `group_manual_rank`        | Manuel grup sıralaması bayrağı                        |
 | 011 | `best_third_rankings`      | En iyi 3. takımlar tablosu                            |
 | 012 | `knockout_bracket_slots`   | Eleme bracket slot kolonları                          |
+| 013 | `set_team_selections_fn`   | Atomik takım seçimi RPC (`set_team_selections`)       |
+
+---
+
+## Ana Sayfa (Katılımcı)
+
+Ana sayfa (`/`) turnuva durumuna göre üç fazda çalışır. Veri kaynağı: `GET /api/me/dashboard` (Faz 3) ve `/api/teams` (Faz 1–2 rehberi).
+
+| Faz | Koşul | Görünüm |
+| --- | ----- | ------- |
+| 1 | Seçimler açık | Turnuva rehberi (tier/grup), seçim geri sayımı, Seçimlerim linki |
+| 2 | Seçimler kilitli, turnuva başlamadı | Kadro özeti (3 takım), ilk maça geri sayım, katlanabilir rehber |
+| 3 | Turnuva başladı | Kişisel panel: sıralama kartı, takım kartları, yaklaşan maçlar, mini lider tablosu, son hareketler, grup ilerlemesi |
+
+Turnuva başlamadan dashboard endpoint’i yalnızca hafif veri döner (`status`, seçimler, minimal `teams`); ağır sorgular (lider tablosu, maç geçmişi, grup özeti) Faz 3’te çalışır.
+
+Seçimi olmayan kullanıcı Faz 3’te boş-durum mesajı görür; sayfa çökmez.
 
 ---
 
@@ -320,8 +340,9 @@ Admin paneline `/{ADMIN_PATH}` adresinden erişilir. Yönetici hesabıyla giriş
 4. Beraberlik varsa ok tuşlarıyla sıralamayı düzenleyin ve kaydedin
 5. **En İyi 3.ler (12→8)** kartında sıralamayı kontrol edin / düzenleyin
 6. **Turnuva ağacını oluştur** (son grup finalize edildiğinde otomatik de tetiklenir)
-7. Eleme maç skorlarını girin — kazananlar otomatik ilerler
-8. Gerekirse **Puanları yeniden hesapla**
+7. Grup sıralaması değiştiyse **Son 32’yi senkronize et** ile eleme eşleşmelerini güncelleyin
+8. Eleme maç skorlarını girin — kazananlar otomatik ilerler
+9. Gerekirse **Puanları yeniden hesapla**
 
 ### Admin sekmeleri
 
@@ -404,13 +425,14 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 ### Kimlik doğrulama
 
-| Method | Endpoint       | Açıklama         |
-| ------ | -------------- | ---------------- |
-| POST   | `/auth/login`  | Giriş            |
-| POST   | `/auth/refresh`| Token yenileme   |
-| POST   | `/auth/logout` | Çıkış            |
-| GET    | `/me`          | Oturum bilgisi   |
-| PUT    | `/me/password` | Şifre değiştirme |
+| Method | Endpoint        | Açıklama                                      |
+| ------ | --------------- | --------------------------------------------- |
+| POST   | `/auth/login`   | Giriş                                         |
+| POST   | `/auth/refresh` | Token yenileme                                |
+| POST   | `/auth/logout`  | Çıkış                                         |
+| GET    | `/me`           | Oturum bilgisi                                |
+| GET    | `/me/dashboard` | Kişisel panel verisi (katılımcı; admin 403)   |
+| PUT    | `/me/password`  | Şifre değiştirme                              |
 
 ### Katılımcı
 
@@ -426,18 +448,19 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 ### Admin (seçilmiş)
 
-| Method | Endpoint                       | Açıklama                      |
-| ------ | ------------------------------ | ----------------------------- |
-| PUT    | `/matches/:id/result`          | Maç skoru kaydet              |
-| POST   | `/groups/:code/finalize`       | Grubu finalize et             |
-| PUT    | `/groups/:code/rankings`       | Manuel grup sıralaması        |
-| GET    | `/groups/best-thirds`          | En iyi 3.ler durumu           |
-| POST   | `/groups/best-thirds/compute`  | Otomatik hesapla              |
-| PUT    | `/groups/best-thirds/rankings` | Manuel sıralama kaydet        |
-| POST   | `/knockout-bracket/generate`   | Eleme ağacı oluştur           |
-| GET    | `/knockout-bracket/status`     | Ağaç durumu                   |
-| GET    | `/teams/eligible?stage=...`    | Eleme için uygun takımlar     |
-| POST   | `/recalculate`                 | Tüm puanları yeniden hesapla  |
+| Method | Endpoint                       | Açıklama                                  |
+| ------ | ------------------------------ | ----------------------------------------- |
+| PUT    | `/matches/:id/result`          | Maç skoru kaydet                          |
+| POST   | `/groups/:code/finalize`       | Grubu finalize et                         |
+| PUT    | `/groups/:code/rankings`       | Manuel grup sıralaması                    |
+| GET    | `/groups/best-thirds`          | En iyi 3.ler durumu                       |
+| POST   | `/groups/best-thirds/compute`  | Otomatik hesapla                          |
+| PUT    | `/groups/best-thirds/rankings` | Manuel sıralama kaydet                    |
+| POST   | `/knockout-bracket/generate`   | Eleme ağacı oluştur                       |
+| POST   | `/knockout-bracket/sync`       | Son 32 takım atamalarını senkronize et    |
+| GET    | `/knockout-bracket/status`     | Ağaç durumu                               |
+| GET    | `/teams/eligible?stage=...`    | Eleme için uygun takımlar                 |
+| POST   | `/recalculate`                 | Tüm puanları yeniden hesapla              |
 
 ---
 
@@ -450,14 +473,15 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 ### Servis katmanı
 
-| Servis                            | Sorumluluk                                     |
-| --------------------------------- | ---------------------------------------------- |
-| `scoring-engine.ts`               | Puan hesaplama, grup finalize, eleme ilerleme  |
-| `group-standings-service.ts`      | Grup puan tablosu güncelleme                   |
-| `best-third-service.ts`           | En iyi 3.lük sıralaması                        |
-| `knockout-eligibility-service.ts` | Eleme turu takım uygunluğu                     |
-| `knockout-bracket-service.ts`     | Ağaç oluşturma ve skor sonrası slot doldurma   |
-| `tournament-config.ts`            | Seçim kilidi, turnuva başlangıcı               |
+| Servis                            | Sorumluluk                                                         |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `scoring-engine.ts`               | Puan hesaplama, grup finalize, eleme ilerleme                      |
+| `group-standings-service.ts`      | Grup puan tablosu güncelleme                                       |
+| `best-third-service.ts`           | En iyi 3.lük sıralaması                                            |
+| `knockout-eligibility-service.ts` | Eleme turu takım uygunluğu                                         |
+| `knockout-bracket-service.ts`     | Ağaç oluşturma, Son 32 senkronizasyonu, skor sonrası slot doldurma |
+| `dashboard-service.ts`            | Katılımcı ana sayfa / `GET /me/dashboard` toplu veri               |
+| `tournament-config.ts`            | Seçim kilidi, turnuva başlangıcı                                   |
 
 ### Güvenlik
 
