@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import Card from 'primevue/card';
 import Tag from 'primevue/tag';
 import type { GuideGroup, GuideTier } from '@/types/dashboard';
@@ -17,6 +17,7 @@ const guideTabs: { key: GuideTab; label: string }[] = [
 ];
 
 const activeGuideTab = ref<GuideTab>('tiers');
+const openGroupTeamId = ref<number | null>(null);
 
 function teamsByTier(tierId: number, groups: GuideGroup[]) {
   return groups
@@ -29,6 +30,22 @@ function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
   const group = groups.find((g) => g.code === groupCode);
   return [...(group?.teams ?? [])].sort((a, b) => a.name_tr.localeCompare(b.name_tr, 'tr'));
 }
+
+function toggleGroupPopover(teamId: number) {
+  openGroupTeamId.value = openGroupTeamId.value === teamId ? null : teamId;
+}
+
+function closeGroupPopover() {
+  openGroupTeamId.value = null;
+}
+
+onMounted(() => {
+  document.addEventListener('click', closeGroupPopover);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeGroupPopover);
+});
 </script>
 
 <template>
@@ -62,9 +79,21 @@ function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
                   >
                     {{ team.name_tr }}
                   </RouterLink>
-                  <span class="group-chip-wrap">
-                    <Tag :value="`Grup ${team.group_code}`" severity="secondary" class="group-chip" />
-                    <div class="group-tooltip" role="tooltip">
+                  <span class="group-chip-wrap" @click.stop>
+                    <button
+                      type="button"
+                      class="group-chip-btn"
+                      :aria-expanded="openGroupTeamId === team.id"
+                      :aria-label="`Grup ${team.group_code} takımlarını göster`"
+                      @click="toggleGroupPopover(team.id)"
+                    >
+                      <Tag :value="`Grup ${team.group_code}`" severity="secondary" class="group-chip" />
+                    </button>
+                    <div
+                      class="group-tooltip"
+                      :class="{ 'is-open': openGroupTeamId === team.id }"
+                      role="tooltip"
+                    >
                       <p class="group-tooltip-title">Grup {{ team.group_code }}</p>
                       <ul class="group-tooltip-list">
                         <li
@@ -207,8 +236,23 @@ function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
   flex-shrink: 0;
 }
 
+.group-chip-btn {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.group-chip-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .group-chip {
-  cursor: help;
+  cursor: pointer;
 }
 
 .group-tooltip {
@@ -224,12 +268,16 @@ function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   box-shadow: var(--shadow-md);
-  pointer-events: none;
 }
 
-.group-chip-wrap:hover .group-tooltip,
-.group-chip-wrap:focus-within .group-tooltip {
+.group-tooltip.is-open {
   display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .group-chip-wrap:hover .group-tooltip {
+    display: block;
+  }
 }
 
 .group-tooltip-title {
