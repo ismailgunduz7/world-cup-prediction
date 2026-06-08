@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import Message from 'primevue/message';
 import ToggleSwitch from 'primevue/toggleswitch';
@@ -7,15 +7,20 @@ import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import GroupRankingEditor from '@/components/bracket/GroupRankingEditor.vue';
 import BracketTree from '@/components/bracket/BracketTree.vue';
+import BracketExportPoster from '@/components/bracket/BracketExportPoster.vue';
 import api from '@/api/client';
+import { useAuthStore } from '@/stores/auth';
+import { downloadBracketImage, openBracketPreviewWindow, previewBracketImage } from '@/utils/export-bracket-image';
+import type { PosterGroup, PosterThirdPick } from '@/types/bracket-export';
 import type { BracketPreview, BracketTeam, ResolvedMatch } from '@/types/bracket';
-import { pruneWinners, resolveBracket } from '@/utils/bracket';
+import { isBracketFullyPicked, pruneWinners, resolveBracket } from '@/utils/bracket';
 
 type GroupTeam = { id: number; name_tr: string; tier?: { name_tr: string } | null };
 type Group = { code: string; teams: GroupTeam[] };
 
 const MAX_THIRDS = 8;
 
+const auth = useAuthStore();
 const loading = ref(true);
 const groups = ref<Group[]>([]);
 const rankings = ref<Record<string, number[]>>({});
@@ -25,6 +30,10 @@ const showTiers = ref(false);
 const preview = ref<BracketPreview | null>(null);
 const winners = ref<Record<number, number>>({});
 const generating = ref(false);
+const exporting = ref(false);
+const previewing = ref(false);
+const exportError = ref<string | null>(null);
+const exportPosterRef = ref<HTMLElement | null>(null);
 const stale = ref(false);
 const error = ref<string | null>(null);
 
@@ -85,6 +94,43 @@ const champion = computed<BracketTeam | null>(() => {
   if (!finalMatch?.winnerTeamId) return null;
   return finalMatch.home?.teamId === finalMatch.winnerTeamId ? finalMatch.home : finalMatch.away;
 });
+
+const canExportBracket = computed(() => isBracketFullyPicked(resolvedMatches.value));
+
+const exportGroups = computed<PosterGroup[]>(() =>
+  groups.value.map((group) => ({
+    code: group.code,
+    rows: (rankings.value[group.code] ?? []).map((teamId, index) => {
+      let badge: PosterGroup['rows'][number]['badge'];
+      if (index === 0 || index === 1) {
+        badge = 'green';
+      } else if (index === 3) {
+        badge = 'red';
+      } else if (selectedThirds.value.includes(group.code)) {
+        badge = 'green';
+      } else {
+        badge = 'red';
+      }
+      return {
+        rank: index + 1,
+        name: teamName(teamId),
+        badge,
+      };
+    }),
+  })),
+);
+
+const exportThirds = computed<PosterThirdPick[]>(() =>
+  [...selectedThirds.value]
+    .sort((a, b) => a.localeCompare(b))
+    .map((code) => {
+      const candidate = thirdCandidates.value.find((c) => c.code === code);
+      return {
+        code,
+        name: candidate?.name ?? teamName(rankings.value[code]?.[2] ?? 0),
+      };
+    }),
+);
 
 function move(code: string, index: number, direction: -1 | 1) {
   const current = rankings.value[code];
@@ -161,6 +207,42 @@ function pick(matchNumber: number, teamId: number) {
 
 function resetWinners() {
   winners.value = {};
+}
+
+async function exportImage() {
+  if (!preview.value || !exportPosterRef.value) return;
+  exporting.value = true;
+  exportError.value = null;
+  try {
+    await nextTick();
+    await downloadBracketImage(exportPosterRef.value, auth.user?.displayName ?? 'kullanici');
+  } catch {
+    exportError.value = 'Görsel oluşturulamadı. Lütfen tekrar deneyin.';
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function openPreview() {
+  if (!preview.value || !exportPosterRef.value) return;
+
+  const previewWindow = openBracketPreviewWindow();
+  if (!previewWindow) {
+    exportError.value = 'Önizleme açılamadı. Tarayıcı pop-up engelliyor olabilir.';
+    return;
+  }
+
+  previewing.value = true;
+  exportError.value = null;
+  try {
+    await nextTick();
+    await previewBracketImage(exportPosterRef.value, previewWindow);
+  } catch {
+    previewWindow.close();
+    exportError.value = 'Önizleme oluşturulamadı. Lütfen tekrar deneyin.';
+  } finally {
+    previewing.value = false;
+  }
 }
 </script>
 
@@ -241,6 +323,28 @@ function resetWinners() {
           text
           @click="resetWinners"
         />
+        <Button
+          v-if="preview"
+          label="Önizle"
+          icon="pi pi-external-link"
+          severity="secondary"
+          text
+          :loading="previewing"
+          :disabled="exporting || !canExportBracket"
+          @click="openPreview"
+        />
+        <Button
+          v-if="preview"
+          label="Görseli indir"
+          icon="pi pi-download"
+          severity="secondary"
+          :loading="exporting"
+          :disabled="previewing || !canExportBracket"
+          @click="exportImage"
+        />
+        <span v-if="preview && !canExportBracket" class="bracket-note text-muted">
+          Görsel için tüm eleme maçlarında kazanan seçmelisin.
+        </span>
         <span v-if="!canGenerate" class="bracket-note text-muted">
           Önce 8 grup üçüncüsü seçmelisin.
         </span>
@@ -250,6 +354,8 @@ function resetWinners() {
       <Message v-if="preview && stale" severity="warn" :closable="false">
         Sıralama/üçüncü seçimi değişti. Güncel ağaç için “Bracket’i güncelle”ye bas.
       </Message>
+
+      <Message v-if="exportError" severity="error" :closable="false">{{ exportError }}</Message>
 
       <div v-if="champion" class="champion-banner">
         <i class="pi pi-trophy" />
@@ -264,6 +370,20 @@ function resetWinners() {
         Ağaç henüz oluşturulmadı. Yukarıdaki adımları tamamlayıp “Bracket’i oluştur”a bas.
       </p>
     </section>
+
+    <!-- Görsel indirme için ekran dışı poster -->
+    <div v-if="preview" class="export-host" aria-hidden="true">
+      <div ref="exportPosterRef">
+        <BracketExportPoster
+          :matches="resolvedMatches"
+          :display-name="auth.user?.displayName ?? 'Kullanıcı'"
+          :combination-no="preview.combinationNo"
+          :champion="champion"
+          :groups="exportGroups"
+          :selected-thirds="exportThirds"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -430,5 +550,13 @@ function resetWinners() {
 
 .empty-bracket {
   font-size: 0.9rem;
+}
+
+.export-host {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  pointer-events: none;
+  z-index: -1;
 }
 </style>

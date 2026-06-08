@@ -81,6 +81,16 @@ export function resolveBracket(
   return resolved;
 }
 
+/** Tüm eleme maçlarında iki takım belli ve kazanan seçilmiş mi? */
+export function isBracketFullyPicked(resolved: ResolvedMatch[]): boolean {
+  if (resolved.length === 0) return false;
+  return resolved.every((m) => m.home != null && m.away != null && m.winnerTeamId != null);
+}
+
+export function countUnpickedBracketMatches(resolved: ResolvedMatch[]): number {
+  return resolved.filter((m) => m.home == null || m.away == null || m.winnerTeamId == null).length;
+}
+
 /**
  * Geçersiz kalan kazanan tahminlerini temizler: bir üst turdaki değişiklik
  * sonucu artık o maçta yer almayan bir takım "kazanan" olarak işaretliyse silinir.
