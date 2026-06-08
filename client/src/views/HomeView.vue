@@ -16,8 +16,12 @@ import UpcomingStrip from '@/components/dashboard/UpcomingStrip.vue';
 import MiniLeaderboard from '@/components/dashboard/MiniLeaderboard.vue';
 import RecentActivity from '@/components/dashboard/RecentActivity.vue';
 import GroupProgress from '@/components/dashboard/GroupProgress.vue';
+import { useAuthStore } from '@/stores/auth';
 import api from '@/api/client';
+import { loadSelectionDraft } from '@/utils/selection-draft';
 import type { DashboardData, GuideGroup, GuideTier } from '@/types/dashboard';
+
+const auth = useAuthStore();
 
 const loading = ref(true);
 const dashboard = ref<DashboardData | null>(null);
@@ -26,14 +30,34 @@ const groups = ref<GuideGroup[]>([]);
 
 const phase = computed(() => {
   if (!dashboard.value) return null;
-  if (!dashboard.value.status.selectionsLocked) return 1;
-  if (!dashboard.value.status.tournamentStarted) return 2;
-  return 3;
+  const { selectionsLocked, tournamentStarted } = dashboard.value.status;
+  const selectionsComplete = dashboard.value.teams.length === 3;
+
+  if (!selectionsLocked) {
+    return selectionsComplete ? 2 : 1;
+  }
+  if (!tournamentStarted) return 3;
+  return 4;
 });
 
-const showGuide = computed(() => phase.value === 1 || phase.value === 2);
+const showGuideAccordion = computed(() => phase.value === 2 || phase.value === 3);
 
-onMounted(async () => {
+const savedSelectionCount = computed(() => dashboard.value?.teams.length ?? 0);
+
+const draftSelectionCount = computed(() => {
+  if (!dashboard.value?.status.selectionsLocked && auth.user?.id) {
+    return loadSelectionDraft(auth.user.id)?.length ?? 0;
+  }
+  return 0;
+});
+
+/** Kayıtlı + henüz kaydedilmemiş taslak seçimler (Faz 1 mesajı için). */
+const effectiveSelectionCount = computed(() =>
+  Math.max(savedSelectionCount.value, draftSelectionCount.value),
+);
+
+async function loadHome() {
+  loading.value = true;
   const dashboardRes = await api.get('/me/dashboard');
   dashboard.value = dashboardRes.data;
 
@@ -44,17 +68,55 @@ onMounted(async () => {
   }
 
   loading.value = false;
-});
+}
+
+onMounted(loadHome);
+
+function formatLockDate(iso: string | null) {
+  if (!iso) return 'Kilit tarihi';
+  return new Date(iso).toLocaleString('tr-TR');
+}
 </script>
 
 <template>
   <LoadingState v-if="loading" />
 
   <div v-else-if="dashboard" class="page-stack">
-    <!-- Faz 1: Seçim açık -->
+    <!-- Faz 1: Seçim açık, henüz tamamlanmadı -->
     <template v-if="phase === 1">
+      <PageHeader title="Turnuva Rehberi" />
+
+      <CountdownBanner
+        :target-at="dashboard.status.selectionLockAt"
+        label="Seçim kilidine kalan süre"
+      />
+
+      <Message severity="info" :closable="false">
+        <template v-if="effectiveSelectionCount === 0">
+          3 takımınızı seçmek için
+          <RouterLink to="/secimlerim">Seçimlerim</RouterLink>
+          sayfasına gidin.
+        </template>
+        <template v-else-if="effectiveSelectionCount >= 3 && savedSelectionCount < 3">
+          3 takımı seçtiniz —
+          <RouterLink to="/secimlerim">Seçimlerim</RouterLink>
+          sayfasında Kaydet’e basarak kadronuzu onaylayın.
+        </template>
+        <template v-else>
+          {{ 3 - effectiveSelectionCount }} takım daha seçmelisiniz —
+          <RouterLink to="/secimlerim">Seçimlerim</RouterLink>
+          sayfasından kadronuzu tamamlayın.
+        </template>
+      </Message>
+
+      <TournamentGuide :tiers="tiers" :groups="groups" />
+    </template>
+
+    <!-- Faz 2: Seçim tamam, kilit öncesi -->
+    <template v-else-if="phase === 2">
       <PageHeader
-        title="Turnuva Rehberi"
+        title="Kadron hazır"
+        subtitle="Seçimler kilitlenene kadar seçtiğiniz takımları değiştirebilirsiniz"
       />
 
       <CountdownBanner
@@ -63,16 +125,40 @@ onMounted(async () => {
       />
 
       <Message severity="info" :closable="false">
-        3 takımınızı seçmek için
+        <strong>{{ formatLockDate(dashboard.status.selectionLockAt) }}</strong>
+        tarihine kadar
         <RouterLink to="/secimlerim">Seçimlerim</RouterLink>
-        sayfasına gidin.
+        sayfasından kadronuzu güncelleyebilirsiniz.
       </Message>
 
-      <TournamentGuide :tiers="tiers" :groups="groups" />
+      <div class="squad-grid">
+        <Card v-for="team in dashboard.teams" :key="team.teamId" class="squad-card">
+          <template #title>
+            <RouterLink
+              :to="{ name: 'team-matches', params: { id: team.teamId }, query: { from: 'home' } }"
+              class="team-title-link"
+            >
+              {{ team.name }}
+            </RouterLink>
+          </template>
+          <template #subtitle>
+            <span class="team-meta">{{ team.tierName }} · Grup {{ team.groupCode }}</span>
+          </template>
+        </Card>
+      </div>
+
+      <Accordion v-if="showGuideAccordion && tiers.length" class="guide-accordion">
+        <AccordionPanel value="guide">
+          <AccordionHeader>Turnuva rehberi</AccordionHeader>
+          <AccordionContent>
+            <TournamentGuide :tiers="tiers" :groups="groups" />
+          </AccordionContent>
+        </AccordionPanel>
+      </Accordion>
     </template>
 
-    <!-- Faz 2: Kilitli, başlamadı -->
-    <template v-else-if="phase === 2">
+    <!-- Faz 3: Kilitli, turnuva başlamadı -->
+    <template v-else-if="phase === 3">
       <PageHeader title="Kadron hazır" />
 
       <CountdownBanner
@@ -103,7 +189,7 @@ onMounted(async () => {
         Henüz 3 takım seçmediniz. Turnuva başladığında kişisel paneliniz sınırlı olacak.
       </Message>
 
-      <Accordion v-if="showGuide && tiers.length" class="guide-accordion">
+      <Accordion v-if="showGuideAccordion && tiers.length" class="guide-accordion">
         <AccordionPanel value="guide">
           <AccordionHeader>Turnuva rehberi</AccordionHeader>
           <AccordionContent>
@@ -113,7 +199,7 @@ onMounted(async () => {
       </Accordion>
     </template>
 
-    <!-- Faz 3: Turnuva başladı -->
+    <!-- Faz 4: Turnuva başladı -->
     <template v-else>
       <PageHeader title="Panelim" subtitle="Canlı sıralama, takımların ve maçların özeti" />
 
@@ -191,6 +277,22 @@ onMounted(async () => {
 
 .guide-accordion {
   margin-top: 0.5rem;
+}
+
+.phase-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-selections-link {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-primary-hover);
+  text-decoration: none;
+}
+
+.edit-selections-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 900px) {

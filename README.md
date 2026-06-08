@@ -233,17 +233,18 @@ yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 
 ## Ana Sayfa (Katılımcı)
 
-Ana sayfa (`/`) turnuva durumuna göre üç fazda çalışır. Veri kaynağı: `GET /api/me/dashboard` (Faz 3) ve `/api/teams` (Faz 1–2 rehberi).
+Ana sayfa (`/`) turnuva durumuna göre dört fazda çalışır. Veri kaynağı: `GET /api/me/dashboard` (Faz 4) ve `/api/teams` (Faz 1–3 rehberi).
 
 | Faz | Koşul | Görünüm |
 | --- | ----- | ------- |
-| 1 | Seçimler açık | Turnuva rehberi (tier/grup), seçim geri sayımı, Seçimlerim linki |
-| 2 | Seçimler kilitli, turnuva başlamadı | Kadro özeti (3 takım), ilk maça geri sayım, katlanabilir rehber |
-| 3 | Turnuva başladı | Kişisel panel: sıralama kartı, takım kartları, yaklaşan maçlar, mini lider tablosu, son hareketler, grup ilerlemesi |
+| 1 | Seçimler açık, kadro eksik | Turnuva rehberi, kilide geri sayım, Seçimlerim linki |
+| 2 | Seçimler açık, 3 takım seçildi | Kadro kartları, kilide geri sayım, düzenleme mesajı ve linki, katlanabilir rehber |
+| 3 | Seçimler kilitli, turnuva başlamadı | Kadro özeti, ilk maça geri sayım, katlanabilir rehber |
+| 4 | Turnuva başladı | Kişisel panel: sıralama kartı, takım kartları, yaklaşan maçlar, mini lider tablosu, son hareketler, grup ilerlemesi |
 
-Turnuva başlamadan dashboard endpoint’i yalnızca hafif veri döner (`status`, seçimler, minimal `teams`); ağır sorgular (lider tablosu, maç geçmişi, grup özeti) Faz 3’te çalışır.
+Turnuva başlamadan dashboard endpoint’i yalnızca hafif veri döner (`status`, seçimler, minimal `teams`); ağır sorgular (lider tablosu, maç geçmişi, grup özeti) Faz 4’te çalışır.
 
-Seçimi olmayan kullanıcı Faz 3’te boş-durum mesajı görür; sayfa çökmez.
+Seçimi olmayan kullanıcı Faz 4’te boş-durum mesajı görür; sayfa çökmez.
 
 ---
 
@@ -452,16 +453,16 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 ### Katılımcı
 
-| Method  | Endpoint              | Açıklama                  |
-| ------- | --------------------- | ------------------------- |
-| GET/PUT | `/selections`         | Takım seçimleri           |
-| GET     | `/leaderboard`        | Sıralama tablosu          |
-| GET     | `/players/:id`        | Oyuncu puan detayı        |
-| GET     | `/teams/:id`          | Takım maçları ve puanları |
-| GET     | `/groups`             | Grup puan durumları       |
-| GET     | `/groups/best-thirds` | En iyi 3.ler sıralaması   |
-| POST    | `/bracket/preview`    | Bracket tahmin önizlemesi (stateless, salt-okunur) |
-| GET     | `/scoring-rules`      | Aktif puan kuralları      |
+| Method  | Endpoint              | Açıklama                                              |
+| ------- | --------------------- | ----------------------------------------------------- |
+| GET/PUT | `/selections`         | Takım seçimleri                                       |
+| GET     | `/leaderboard`        | Sıralama tablosu                                      |
+| GET     | `/players/:id`        | Oyuncu puan detayı                                    |
+| GET     | `/teams/:id`          | Takım maçları ve puanları                             |
+| GET     | `/groups`             | Grup puan durumları                                   |
+| GET     | `/groups/best-thirds` | En iyi 3.ler sıralaması                               |
+| POST    | `/bracket/preview`    | Bracket tahmin önizlemesi (stateless, salt-okunur)    |
+| GET     | `/scoring-rules`      | Aktif puan kuralları                                  |
 
 ### Admin (seçilmiş)
 
