@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import Message from 'primevue/message';
+import ToggleSwitch from 'primevue/toggleswitch';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import GroupRankingEditor from '@/components/bracket/GroupRankingEditor.vue';
@@ -10,7 +11,7 @@ import api from '@/api/client';
 import type { BracketPreview, BracketTeam, ResolvedMatch } from '@/types/bracket';
 import { pruneWinners, resolveBracket } from '@/utils/bracket';
 
-type GroupTeam = { id: number; name_tr: string };
+type GroupTeam = { id: number; name_tr: string; tier?: { name_tr: string } | null };
 type Group = { code: string; teams: GroupTeam[] };
 
 const MAX_THIRDS = 8;
@@ -19,6 +20,7 @@ const loading = ref(true);
 const groups = ref<Group[]>([]);
 const rankings = ref<Record<string, number[]>>({});
 const selectedThirds = ref<string[]>([]);
+const showTiers = ref(false);
 
 const preview = ref<BracketPreview | null>(null);
 const winners = ref<Record<number, number>>({});
@@ -48,13 +50,27 @@ function teamName(teamId: number): string {
   return '—';
 }
 
+const tierByTeamId = computed(() => {
+  const map = new Map<number, string>();
+  for (const group of groups.value) {
+    for (const team of group.teams) {
+      if (team.tier?.name_tr) map.set(team.id, team.tier.name_tr);
+    }
+  }
+  return map;
+});
+
 const thirdCandidates = computed(() =>
   groups.value
     .map((group) => {
       const teamId = rankings.value[group.code]?.[2];
-      return teamId != null ? { code: group.code, teamId, name: teamName(teamId) } : null;
+      return teamId != null
+        ? { code: group.code, teamId, name: teamName(teamId), tier: tierByTeamId.value.get(teamId) ?? null }
+        : null;
     })
-    .filter((c): c is { code: string; teamId: number; name: string } => c !== null),
+    .filter(
+      (c): c is { code: string; teamId: number; name: string; tier: string | null } => c !== null,
+    ),
 );
 
 const canGenerate = computed(() => selectedThirds.value.length === MAX_THIRDS);
@@ -158,13 +174,20 @@ function resetWinners() {
 
     <!-- 1. Grup sıralamaları -->
     <section class="step">
-      <h2 class="step-title"><span class="step-no">1</span> Grup sıralamaları</h2>
+      <div class="step-head">
+        <h2 class="step-title"><span class="step-no">1</span> Grup sıralamaları</h2>
+        <label class="tier-toggle" for="show-tiers">
+          <ToggleSwitch v-model="showTiers" input-id="show-tiers" />
+          <span>Tierları göster</span>
+        </label>
+      </div>
       <p class="step-hint">Her grupta takımları sürükleyerek ya da ok tuşlarıyla sırala. 3. sıradaki takım üçüncülük adayı olur.</p>
       <GroupRankingEditor
         :groups="groups"
         :rankings="rankings"
         :selected-thirds="selectedThirds"
         :thirds-complete="canGenerate"
+        :show-tiers="showTiers"
         @move="move"
         @reorder="reorder"
       />
@@ -191,6 +214,9 @@ function resetWinners() {
         >
           <span class="third-group">{{ candidate.code }}</span>
           <span class="third-name">{{ candidate.name }}</span>
+          <span v-if="showTiers && candidate.tier" class="tier-chip" :title="candidate.tier">
+            {{ candidate.tier }}
+          </span>
           <i v-if="isThirdSelected(candidate.code)" class="pi pi-check third-check" />
         </button>
       </div>
@@ -232,7 +258,7 @@ function resetWinners() {
 
       <div v-if="preview" class="bracket-wrap">
         <p class="combo-note text-muted">Üçüncülük kombinasyonu no: {{ preview.combinationNo }}</p>
-        <BracketTree :matches="resolvedMatches" @pick="pick" />
+        <BracketTree :matches="resolvedMatches" :show-tiers="showTiers" @pick="pick" />
       </div>
       <p v-else class="text-muted empty-bracket">
         Ağaç henüz oluşturulmadı. Yukarıdaki adımları tamamlayıp “Bracket’i oluştur”a bas.
@@ -248,6 +274,14 @@ function resetWinners() {
   gap: 0.75rem;
 }
 
+.step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .step-title {
   display: flex;
   align-items: center;
@@ -255,6 +289,16 @@ function resetWinners() {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
+}
+
+.tier-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
 }
 
 .step-no {
@@ -332,6 +376,21 @@ function resetWinners() {
   min-width: 0;
   font-size: 0.88rem;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tier-chip {
+  flex-shrink: 0;
+  max-width: 6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

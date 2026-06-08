@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import Button from 'primevue/button';
 
-type GroupTeam = { id: number; name_tr: string };
+type GroupTeam = { id: number; name_tr: string; tier?: { name_tr: string } | null };
 type Group = { code: string; teams: GroupTeam[] };
 
 const props = defineProps<{
@@ -10,6 +10,7 @@ const props = defineProps<{
   rankings: Record<string, number[]>;
   selectedThirds: string[];
   thirdsComplete: boolean;
+  showTiers: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +25,11 @@ const overIndex = ref<number | null>(null);
 function teamName(code: string, teamId: number): string {
   const group = props.groups.find((g) => g.code === code);
   return group?.teams.find((t) => t.id === teamId)?.name_tr ?? '—';
+}
+
+function teamTier(code: string, teamId: number): string | null {
+  const group = props.groups.find((g) => g.code === code);
+  return group?.teams.find((t) => t.id === teamId)?.tier?.name_tr ?? null;
 }
 
 function orderedIds(code: string): number[] {
@@ -105,6 +111,13 @@ function isDropTarget(code: string, index: number) {
           <i class="pi pi-bars drag-handle" aria-hidden="true" />
           <span class="rank-pos" :class="badgeClass(group.code, index)">{{ index + 1 }}</span>
           <span class="rank-name">{{ teamName(group.code, teamId) }}</span>
+          <span
+            v-if="showTiers && teamTier(group.code, teamId)"
+            class="tier-chip"
+            :title="teamTier(group.code, teamId) ?? undefined"
+          >
+            {{ teamTier(group.code, teamId) }}
+          </span>
           <span class="rank-actions">
             <Button
               type="button"
@@ -136,8 +149,26 @@ function isDropTarget(code: string, index: number) {
 <style scoped>
 .group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
+}
+
+@media (max-width: 1100px) {
+  .group-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .group-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .group-card {
@@ -229,6 +260,21 @@ function isDropTarget(code: string, index: number) {
   min-width: 0;
   font-size: 0.9rem;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tier-chip {
+  flex-shrink: 0;
+  max-width: 6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

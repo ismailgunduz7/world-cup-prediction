@@ -6,7 +6,7 @@ export type BracketStage =
   | 'third_place'
   | 'final';
 
-export type BracketTeam = { teamId: number; name: string };
+export type BracketTeam = { teamId: number; name: string; tier?: string | null };
 
 export type BracketMatch = {
   number: number;

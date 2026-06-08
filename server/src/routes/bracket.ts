@@ -56,11 +56,17 @@ bracketRoutes.post('/preview', async (c) => {
 
   const { data: teams, error } = await supabase
     .from('teams')
-    .select('id, name_tr')
+    .select('id, name_tr, tier:tiers(name_tr)')
     .in('id', [...allIds]);
 
   if (error) throw error;
-  const nameMap = new Map((teams ?? []).map((t) => [t.id, t.name_tr]));
+  const infoMap = new Map(
+    (teams ?? []).map((t) => {
+      const tier = t.tier as { name_tr: string } | { name_tr: string }[] | null;
+      const tierName = Array.isArray(tier) ? tier[0]?.name_tr ?? null : tier?.name_tr ?? null;
+      return [t.id, { name: t.name_tr, tier: tierName }];
+    }),
+  );
 
   const winners = new Map<string, number>();
   const runnersUp = new Map<string, number>();
@@ -71,20 +77,24 @@ bracketRoutes.post('/preview', async (c) => {
     if (ids[2] != null) thirds.set(code, ids[2]);
   }
 
-  function resolveTeam(slot: BracketSlot): { teamId: number; name: string } | null {
+  function toTeam(teamId: number | undefined) {
+    if (teamId == null) return null;
+    const info = infoMap.get(teamId);
+    return { teamId, name: info?.name ?? '—', tier: info?.tier ?? null };
+  }
+
+  function resolveTeam(slot: BracketSlot): { teamId: number; name: string; tier: string | null } | null {
     if (/^W\d+$/.test(slot) || /^L\d+$/.test(slot)) return null;
 
     if (slot.startsWith('3@')) {
       const winnerSlot = slot.slice(2) as ThirdPlaceWinnerSlot;
       const group = thirdAssignments[winnerSlot];
-      const teamId = thirds.get(group);
-      return teamId != null ? { teamId, name: nameMap.get(teamId) ?? '—' } : null;
+      return toTeam(thirds.get(group));
     }
 
     const rank = Number(slot[0]);
     const group = slot.slice(1);
-    const teamId = rank === 1 ? winners.get(group) : runnersUp.get(group);
-    return teamId != null ? { teamId, name: nameMap.get(teamId) ?? '—' } : null;
+    return toTeam(rank === 1 ? winners.get(group) : runnersUp.get(group));
   }
 
   const matches = WC2026_KNOCKOUT_BRACKET.map((t) => ({

@@ -5,6 +5,7 @@ import { STAGE_LABELS, STAGE_ORDER } from '@/utils/bracket';
 
 const props = defineProps<{
   matches: ResolvedMatch[];
+  showTiers: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -40,7 +41,14 @@ const rounds = computed(() =>
               :disabled="!match.home"
               @click="match.home && emit('pick', match.number, match.home.teamId)"
             >
-              {{ match.home?.name ?? match.homeLabel }}
+              <span class="side-name">{{ match.home?.name ?? match.homeLabel }}</span>
+              <span
+                v-if="showTiers && match.home?.tier"
+                class="side-tier"
+                :title="match.home.tier"
+              >
+                {{ match.home.tier }}
+              </span>
             </button>
             <button
               type="button"
@@ -52,7 +60,14 @@ const rounds = computed(() =>
               :disabled="!match.away"
               @click="match.away && emit('pick', match.number, match.away.teamId)"
             >
-              {{ match.away?.name ?? match.awayLabel }}
+              <span class="side-name">{{ match.away?.name ?? match.awayLabel }}</span>
+              <span
+                v-if="showTiers && match.away?.tier"
+                class="side-tier"
+                :title="match.away.tier"
+              >
+                {{ match.away.tier }}
+              </span>
             </button>
           </article>
         </div>
@@ -115,7 +130,9 @@ const rounds = computed(() =>
 }
 
 .side {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   width: 100%;
   text-align: left;
   appearance: none;
@@ -128,10 +145,30 @@ const rounds = computed(() =>
   cursor: pointer;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
+  transition: background 0.12s;
+}
+
+.side-name {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 0.12s;
+}
+
+.side-tier {
+  flex-shrink: 0;
+  max-width: 5.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .side:last-child {
