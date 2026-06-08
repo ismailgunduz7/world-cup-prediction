@@ -158,7 +158,7 @@ async function save() {
           Kilitlenmeden önce takım seçimi yapmadınız.
         </Message>
 
-        <div v-if="selectionsLocked" class="team-grid mt-3">
+        <div v-if="selectionsLocked" class="selections-grid mt-3">
           <div v-for="team in visibleTeams" :key="team.id" class="team-tile team-tile-locked">
             <div>
               <strong>{{ team.name_tr }}</strong>
@@ -170,7 +170,7 @@ async function save() {
           </div>
         </div>
 
-        <div v-else class="team-grid mt-3">
+        <div v-else class="selections-grid mt-3">
           <label
             v-for="team in visibleTeams"
             :key="team.id"
@@ -237,7 +237,7 @@ async function save() {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.25rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 
@@ -257,6 +257,64 @@ async function save() {
   cursor: default;
   border-color: var(--color-primary-soft);
   background: var(--color-primary-soft);
+}
+
+/* 48 takım → max 6 sütun (8 eşit satır) */
+.selections-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.selections-grid .team-tile {
+  padding: 0.55rem 0.6rem;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.selections-grid .team-tile strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.selections-grid .tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.selections-grid .tag-row :deep(.p-tag) {
+  font-size: 0.62rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.selections-grid .mt-1 {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 1100px) {
+  .selections-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .selections-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .selections-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .selections-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .actions {

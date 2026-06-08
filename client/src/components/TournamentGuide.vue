@@ -206,7 +206,7 @@ onUnmounted(() => {
 
 .groups-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -315,6 +315,12 @@ onUnmounted(() => {
   color: inherit;
   text-decoration: none;
   font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .groups-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
