@@ -71,6 +71,7 @@ function sideMedal(match: ResolvedMatch, side: 'home' | 'away'): string | null {
 .node {
   position: relative;
   width: 100%;
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 10px;
   overflow: hidden;
@@ -80,9 +81,7 @@ function sideMedal(match: ResolvedMatch, side: 'home' | 'away'): string | null {
 
 .node--accent-gold {
   border: 2px solid #fbbf24;
-  box-shadow:
-    0 0 0 1px rgba(251, 191, 36, 0.35),
-    0 8px 24px rgba(251, 191, 36, 0.25);
+  box-shadow: 0 4px 14px rgba(251, 191, 36, 0.22);
 }
 
 .node-id {
@@ -105,6 +104,8 @@ function sideMedal(match: ResolvedMatch, side: 'home' | 'away'): string | null {
   font-weight: 600;
   color: #1e293b;
   border-bottom: 1px solid #e2e8f0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .row:last-child {
@@ -113,8 +114,9 @@ function sideMedal(match: ResolvedMatch, side: 'home' | 'away'): string | null {
 
 .row-name {
   flex: 1;
+  min-width: 0;
   line-height: 1.25;
-  word-break: break-word;
+  white-space: nowrap;
 }
 
 .row-medal {
@@ -137,7 +139,7 @@ function sideMedal(match: ResolvedMatch, side: 'home' | 'away'): string | null {
 }
 
 .node--accent-gold .row--winner {
-  background: linear-gradient(90deg, #fef3c7 0%, #fde68a 100%);
+  background: #fef3c7;
   color: #92400e;
 }
 </style>

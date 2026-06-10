@@ -554,9 +554,12 @@ async function openPreview() {
 
 .export-host {
   position: fixed;
-  left: -9999px;
+  left: 0;
   top: 0;
+  width: 3000px;
+  opacity: 0;
   pointer-events: none;
   z-index: -1;
+  overflow: visible;
 }
 </style>

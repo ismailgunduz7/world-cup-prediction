@@ -1,5 +1,8 @@
 import { toPng } from 'html-to-image';
 
+/** BracketExportPoster sabit genişliği — mobil/masaüstü tutarlılığı için. */
+export const POSTER_WIDTH = 3000;
+
 function sanitizeFilenamePart(value: string): string {
   return value
     .trim()
@@ -24,13 +27,49 @@ async function waitForRender(): Promise<void> {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
-export async function captureBracketImage(element: HTMLElement): Promise<string> {
-  await waitForRender();
-  return toPng(element, {
-    cacheBust: true,
-    pixelRatio: 2,
-    backgroundColor: '#042f2e',
-  });
+function findPosterElement(wrapper: HTMLElement): HTMLElement {
+  return wrapper.querySelector('.poster') ?? wrapper;
+}
+
+/**
+ * Vue bileşen ağacını bozmadan yakalamak için canlı DOM yerine klon kullanır.
+ * Klon geçici sandbox'ta sabit genişlikte render edilir.
+ */
+async function capturePosterClone(poster: HTMLElement): Promise<string> {
+  const clone = poster.cloneNode(true) as HTMLElement;
+
+  const sandbox = document.createElement('div');
+  sandbox.setAttribute('aria-hidden', 'true');
+  sandbox.style.cssText = [
+    'position: fixed',
+    'left: 0',
+    'top: 0',
+    `width: ${POSTER_WIDTH}px`,
+    'overflow: visible',
+    'opacity: 0',
+    'pointer-events: none',
+    'z-index: -1',
+  ].join(';');
+
+  document.body.appendChild(sandbox);
+  sandbox.appendChild(clone);
+
+  try {
+    await waitForRender();
+    return await toPng(clone, {
+      cacheBust: true,
+      pixelRatio: 2,
+      width: POSTER_WIDTH,
+      backgroundColor: '#042f2e',
+    });
+  } finally {
+    sandbox.remove();
+  }
+}
+
+export async function captureBracketImage(wrapper: HTMLElement): Promise<string> {
+  const poster = findPosterElement(wrapper);
+  return capturePosterClone(poster);
 }
 
 /** Pop-up engelleyicisini aşmak için tıklama anında çağrılmalı. */
@@ -104,8 +143,8 @@ export function showBracketPreviewImage(previewWindow: Window, dataUrl: string):
   previewWindow.document.close();
 }
 
-export async function downloadBracketImage(element: HTMLElement, displayName: string): Promise<void> {
-  const dataUrl = await captureBracketImage(element);
+export async function downloadBracketImage(wrapper: HTMLElement, displayName: string): Promise<void> {
+  const dataUrl = await captureBracketImage(wrapper);
   const link = document.createElement('a');
   link.href = dataUrl;
   link.download = buildFilename(displayName);
@@ -113,10 +152,10 @@ export async function downloadBracketImage(element: HTMLElement, displayName: st
 }
 
 export async function previewBracketImage(
-  element: HTMLElement,
+  wrapper: HTMLElement,
   previewWindow: Window,
 ): Promise<void> {
   showBracketPreviewLoading(previewWindow);
-  const dataUrl = await captureBracketImage(element);
+  const dataUrl = await captureBracketImage(wrapper);
   showBracketPreviewImage(previewWindow, dataUrl);
 }

@@ -45,8 +45,8 @@ function gridRowSpan(startIndex: number, span: number): string {
     <header class="poster-header">
       <div class="poster-brand">
         <span class="poster-icon" aria-hidden="true">⚽</span>
-        <div>
-          <p class="poster-kicker">2026 Dünya Kupası</p>
+        <div class="poster-brand-text">
+          <p class="poster-kicker">2026 DÜNYA KUPASI</p>
           <h1 class="poster-title">Bracket Tahmini</h1>
         </div>
       </div>
@@ -61,7 +61,7 @@ function gridRowSpan(startIndex: number, span: number): string {
     </header>
 
     <section class="poster-section">
-      <h2 class="section-title">Grup sıralamaları</h2>
+      <h2 class="section-title">GRUP SIRALAMALARI</h2>
       <div class="groups-grid">
         <article v-for="group in groups" :key="group.code" class="group-card">
           <h3 class="group-code">Grup {{ group.code }}</h3>
@@ -81,7 +81,7 @@ function gridRowSpan(startIndex: number, span: number): string {
     </section>
 
     <section class="poster-section">
-      <h2 class="section-title">En iyi 8 üçüncü</h2>
+      <h2 class="section-title">EN İYİ 8 ÜÇÜNCÜ</h2>
       <div class="thirds-row">
         <div v-for="third in selectedThirds" :key="third.code" class="third-pill">
           <span class="third-pill-code">{{ third.code }}</span>
@@ -91,7 +91,7 @@ function gridRowSpan(startIndex: number, span: number): string {
     </section>
 
     <section class="poster-section poster-section--bracket">
-      <h2 class="section-title">Eleme ağacı</h2>
+      <h2 class="section-title">ELEME AĞACI</h2>
       <div class="mirror-bracket-wrap">
         <div class="mirror-bracket">
         <div class="half half-left">
@@ -136,9 +136,9 @@ function gridRowSpan(startIndex: number, span: number): string {
         </div>
 
         <div class="half-center">
-          <p class="center-label">Final</p>
+          <p class="center-label">FİNAL</p>
           <BracketExportMatch :match="getMatch(BRACKET_FINAL)" accent="gold" medal-mode="final" />
-          <p class="center-label center-label--third">3.lük Maçı</p>
+          <p class="center-label center-label--third">3.LÜK MAÇI</p>
           <BracketExportMatch :match="getMatch(BRACKET_THIRD_PLACE)" medal-mode="third_place" />
         </div>
 
@@ -196,6 +196,8 @@ function gridRowSpan(startIndex: number, span: number): string {
 <style scoped>
 .poster {
   width: 3000px;
+  min-width: 3000px;
+  max-width: none;
   padding: 44px 52px 36px;
   box-sizing: border-box;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -203,6 +205,13 @@ function gridRowSpan(startIndex: number, span: number): string {
   background:
     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(45, 212, 191, 0.18), transparent 60%),
     linear-gradient(165deg, #042f2e 0%, #0f766e 28%, #134e4a 55%, #0f172a 100%);
+  -webkit-font-smoothing: antialiased;
+}
+
+.poster :is(h1, h2, p):not(.section-title):not(.center-label) {
+  margin: 0;
+  font-family: inherit;
+  text-transform: none;
 }
 
 .poster-header {
@@ -219,11 +228,18 @@ function gridRowSpan(startIndex: number, span: number): string {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.poster-brand-text {
+  flex-shrink: 0;
 }
 
 .poster-icon {
   font-size: 52px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .poster-kicker {
@@ -231,7 +247,6 @@ function gridRowSpan(startIndex: number, span: number): string {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: #5eead4;
 }
 
@@ -240,10 +255,34 @@ function gridRowSpan(startIndex: number, span: number): string {
   font-size: 42px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .poster-meta {
   text-align: right;
+  flex-shrink: 0;
+}
+
+.poster-meta .poster-champion {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.15));
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  font-size: 18px;
+  font-weight: 800;
+  color: #fde68a;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.poster-champion .trophy {
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .poster-user {
@@ -258,32 +297,19 @@ function gridRowSpan(startIndex: number, span: number): string {
   color: #94a3b8;
 }
 
-.poster-champion {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.15));
-  border: 1px solid rgba(251, 191, 36, 0.45);
-  font-size: 18px;
-  font-weight: 800;
-  color: #fde68a;
-}
-
 .poster-section {
   margin-bottom: 32px;
 }
 
-.section-title {
-  margin: 0 0 16px;
-  font-size: 18px;
+.poster-section .section-title {
+  margin: 0 0 32px;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
   color: #99f6e4;
   text-align: center;
+  white-space: nowrap;
 }
 
 .poster-section--bracket {
@@ -370,38 +396,43 @@ function gridRowSpan(startIndex: number, span: number): string {
 
 .thirds-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
 }
 
 .third-pill {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: 12px;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: #fff;
   color: #0f172a;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .third-pill-code {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: #ccfbf1;
   color: #0f766e;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .third-pill-name {
   flex: 1;
-  font-size: 15px;
+  min-width: 0;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .mirror-bracket-wrap {
@@ -423,18 +454,16 @@ function gridRowSpan(startIndex: number, span: number): string {
 }
 
 .half-grid {
+  --bracket-col-width: 200px;
   display: grid;
   column-gap: 16px;
   row-gap: 0;
   height: 100%;
 }
 
-.half-left .half-grid {
-  grid-template-columns: 200px 180px 170px 160px;
-}
-
+.half-left .half-grid,
 .half-right .half-grid {
-  grid-template-columns: 160px 170px 180px 200px;
+  grid-template-columns: repeat(4, var(--bracket-col-width));
 }
 
 .cell {
@@ -491,7 +520,6 @@ function gridRowSpan(startIndex: number, span: number): string {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: #99f6e4;
 }
 
