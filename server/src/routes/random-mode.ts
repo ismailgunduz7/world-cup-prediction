@@ -17,11 +17,14 @@ randomModeRoutes.use('*', authMiddleware, participantMiddleware);
  * Computes the pool of team ids a user is allowed to be randomly assigned,
  * given a condition + tier filter. Pool computation lives here (server side,
  * authoritative) so a client can never influence which teams it gets.
+ * `never_picked` only excludes teams selected by players in the same
+ * competition (real-mode selections, not random assignments).
  */
 type PoolTeam = { id: number; group_code: string };
 
 async function computeEligiblePool(
   userId: string,
+  competitionId: string | null,
   condition: RandomCondition,
   allowedTiers: number[],
   excludeTeamIds: number[],
@@ -43,10 +46,23 @@ async function computeEligiblePool(
       .eq('user_id', userId);
     if (error) throw error;
     for (const s of own ?? []) excluded.add(s.team_id);
-  } else if (condition === 'never_picked') {
-    const { data: all, error } = await supabase.from('team_selections').select('team_id');
-    if (error) throw error;
-    for (const s of all ?? []) excluded.add(s.team_id);
+  } else if (condition === 'never_picked' && competitionId) {
+    const { data: competitionUsers, error: usersError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('competition_id', competitionId)
+      .eq('is_admin', false);
+    if (usersError) throw usersError;
+
+    const competitionUserIds = (competitionUsers ?? []).map((u) => u.id);
+    if (competitionUserIds.length > 0) {
+      const { data: picked, error } = await supabase
+        .from('team_selections')
+        .select('team_id')
+        .in('user_id', competitionUserIds);
+      if (error) throw error;
+      for (const s of picked ?? []) excluded.add(s.team_id);
+    }
   }
 
   return (teams ?? [])
@@ -172,7 +188,13 @@ randomModeRoutes.post('/trigger', async (c) => {
 
   const allowedTiers = [...new Set(parsed.data.allowedTiers)];
   const noSameGroup = parsed.data.noSameGroup;
-  const pool = await computeEligiblePool(user.id, parsed.data.condition, allowedTiers, []);
+  const pool = await computeEligiblePool(
+    user.id,
+    user.competitionId,
+    parsed.data.condition,
+    allowedTiers,
+    [],
+  );
 
   if (noSameGroup) {
     const distinctGroups = new Set(pool.map((t) => t.group_code)).size;
@@ -254,6 +276,7 @@ randomModeRoutes.post('/reroll', async (c) => {
   const currentTeamIds = (slots ?? []).map((s) => s.team_id);
   let pool = await computeEligiblePool(
     user.id,
+    user.competitionId,
     entry.condition as RandomCondition,
     entry.allowed_tiers as number[],
     currentTeamIds,
