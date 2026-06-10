@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Card from 'primevue/card';
 import Button from 'primevue/button';
@@ -10,6 +10,7 @@ import Checkbox from 'primevue/checkbox';
 import { useToast } from 'primevue/usetoast';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
+import GroupChip from '@/components/GroupChip.vue';
 import api from '@/api/client';
 import { useReferenceStore } from '@/stores/reference';
 
@@ -56,8 +57,6 @@ const rerollUsed = ref(false);
 const tiers = ref<Tier[]>([]);
 const groups = ref<Group[]>([]);
 const allTeamNames = ref<string[]>([]);
-const openGroupSlot = ref<number | null>(null);
-
 const condition = ref<RandomCondition>('fully_random');
 const allowedTiers = ref<number[]>([1, 2, 3, 4, 5]);
 const noSameGroup = ref(false);
@@ -100,24 +99,11 @@ onMounted(async () => {
   allTeamNames.value = teamsData.groups.flatMap((g) => g.teams).map((t) => t.name);
 
   loading.value = false;
-  document.addEventListener('click', closeGroupPopover);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('click', closeGroupPopover);
 });
 
 function teamsInGroup(groupCode: string) {
   const group = groups.value.find((g) => g.code === groupCode);
-  return [...(group?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-}
-
-function toggleGroupPopover(slot: number) {
-  openGroupSlot.value = openGroupSlot.value === slot ? null : slot;
-}
-
-function closeGroupPopover() {
-  openGroupSlot.value = null;
+  return group?.teams ?? [];
 }
 
 function toggleTier(id: number) {
@@ -353,37 +339,12 @@ const slotNumbers = [1, 2, 3];
                   class="rm-slot-tags"
                 >
                   <Tag v-if="teamForSlot(slot)!.tierName" :value="teamForSlot(slot)!.tierName!" severity="info" />
-                  <span class="group-chip-wrap" @click.stop>
-                    <button
-                      type="button"
-                      class="group-chip-btn"
-                      :aria-expanded="openGroupSlot === slot"
-                      :aria-label="`Grup ${teamForSlot(slot)!.groupCode} takımlarını göster`"
-                      @click="toggleGroupPopover(slot)"
-                    >
-                      <Tag
-                        :value="`Grup ${teamForSlot(slot)!.groupCode}`"
-                        severity="secondary"
-                        class="group-chip"
-                      />
-                    </button>
-                    <div
-                      class="group-tooltip"
-                      :class="{ 'is-open': openGroupSlot === slot }"
-                      role="tooltip"
-                    >
-                      <p class="group-tooltip-title">Grup {{ teamForSlot(slot)!.groupCode }}</p>
-                      <ul class="group-tooltip-list">
-                        <li
-                          v-for="groupTeam in teamsInGroup(teamForSlot(slot)!.groupCode)"
-                          :key="groupTeam.id"
-                          :class="{ 'is-current': groupTeam.id === teamForSlot(slot)!.id }"
-                        >
-                          {{ groupTeam.name }}
-                        </li>
-                      </ul>
-                    </div>
-                  </span>
+                  <GroupChip
+                    :group-code="teamForSlot(slot)!.groupCode"
+                    :teams="teamsInGroup(teamForSlot(slot)!.groupCode)"
+                    :current-team-id="teamForSlot(slot)!.id"
+                    align="center"
+                  />
                 </div>
               </div>
               <Button
@@ -604,88 +565,6 @@ const slotNumbers = [1, 2, 3];
   gap: 0.3rem;
   justify-content: center;
   align-items: center;
-}
-
-.group-chip-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.group-chip-btn {
-  display: inline-flex;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-  border-radius: var(--radius-sm, 0.35rem);
-}
-
-.group-chip-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-.group-chip {
-  cursor: pointer;
-}
-
-.group-tooltip {
-  display: none;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: calc(100% + 0.4rem);
-  z-index: 20;
-  min-width: 10rem;
-  max-width: 14rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 0.5rem);
-  background: var(--color-surface, var(--color-bg, #fff));
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
-  text-align: left;
-}
-
-.group-tooltip.is-open {
-  display: block;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .group-chip-wrap:hover .group-tooltip {
-    display: block;
-  }
-}
-
-.group-tooltip-title {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.group-tooltip-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.group-tooltip-list li {
-  padding: 0.2rem 0.35rem;
-  border-radius: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary, var(--color-text, #334155));
-}
-
-.group-tooltip-list li.is-current {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 600;
 }
 
 @keyframes rm-pulse {

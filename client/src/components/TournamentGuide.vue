@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { ref } from 'vue';
 import Card from 'primevue/card';
 import Tag from 'primevue/tag';
+import GroupChip from '@/components/GroupChip.vue';
 import TabBar from '@/components/TabBar.vue';
 import type { GuideGroup, GuideTier } from '@/types/dashboard';
 
@@ -18,7 +19,6 @@ const guideTabs: { key: GuideTab; label: string }[] = [
 ];
 
 const activeGuideTab = ref<GuideTab>('tiers');
-const openGroupTeamId = ref<number | null>(null);
 
 function teamsByTier(tierId: number, groups: GuideGroup[]) {
   return groups
@@ -29,24 +29,8 @@ function teamsByTier(tierId: number, groups: GuideGroup[]) {
 
 function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
   const group = groups.find((g) => g.code === groupCode);
-  return [...(group?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  return group?.teams ?? [];
 }
-
-function toggleGroupPopover(teamId: number) {
-  openGroupTeamId.value = openGroupTeamId.value === teamId ? null : teamId;
-}
-
-function closeGroupPopover() {
-  openGroupTeamId.value = null;
-}
-
-onMounted(() => {
-  document.addEventListener('click', closeGroupPopover);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('click', closeGroupPopover);
-});
 </script>
 
 <template>
@@ -67,33 +51,12 @@ onUnmounted(() => {
                   >
                     {{ team.name }}
                   </RouterLink>
-                  <span class="group-chip-wrap" @click.stop>
-                    <button
-                      type="button"
-                      class="group-chip-btn"
-                      :aria-expanded="openGroupTeamId === team.id"
-                      :aria-label="`Grup ${team.groupCode} takımlarını göster`"
-                      @click="toggleGroupPopover(team.id)"
-                    >
-                      <Tag :value="`Grup ${team.groupCode}`" severity="secondary" class="group-chip" />
-                    </button>
-                    <div
-                      class="group-tooltip"
-                      :class="{ 'is-open': openGroupTeamId === team.id }"
-                      role="tooltip"
-                    >
-                      <p class="group-tooltip-title">Grup {{ team.groupCode }}</p>
-                      <ul class="group-tooltip-list">
-                        <li
-                          v-for="groupTeam in teamsInGroup(team.groupCode, groups)"
-                          :key="groupTeam.id"
-                          :class="{ 'is-current': groupTeam.id === team.id }"
-                        >
-                          {{ groupTeam.name }}
-                        </li>
-                      </ul>
-                    </div>
-                  </span>
+                  <GroupChip
+                    :group-code="team.groupCode"
+                    :teams="teamsInGroup(team.groupCode, groups)"
+                    :current-team-id="team.id"
+                    align="end"
+                  />
                 </li>
               </ul>
             </template>
@@ -175,86 +138,6 @@ onUnmounted(() => {
 
 .group-card-body {
   padding: 0.65rem 0.9rem 0.85rem;
-}
-
-.group-chip-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.group-chip-btn {
-  display: inline-flex;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.group-chip-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-.group-chip {
-  cursor: pointer;
-}
-
-.group-tooltip {
-  display: none;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.4rem);
-  z-index: 20;
-  min-width: 10rem;
-  max-width: 14rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  box-shadow: var(--shadow-md);
-}
-
-.group-tooltip.is-open {
-  display: block;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .group-chip-wrap:hover .group-tooltip {
-    display: block;
-  }
-}
-
-.group-tooltip-title {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.group-tooltip-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.group-tooltip-list li {
-  padding: 0.2rem 0.35rem;
-  border-radius: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-}
-
-.group-tooltip-list li.is-current {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 600;
 }
 
 .team-link {
