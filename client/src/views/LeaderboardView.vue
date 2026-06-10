@@ -220,17 +220,22 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
                 <span class="rank-cell">{{ rankLabel(data.rank) }}</span>
               </template>
             </Column>
-            <Column header="Oyuncu" body-class="player-name-col">
+            <Column header="Oyuncu" body-class="player-name-col" style="min-width: 7rem">
               <template #body="{ data }">
                 <span class="name-cell">{{ data.displayName }}</span>
               </template>
             </Column>
-            <Column field="totalScore" header="Toplam Puan" style="width: 8rem">
+            <Column field="totalScore" header="Toplam Puan" style="width: 8rem; min-width: 8rem">
               <template #body="{ data }">
                 <strong>{{ data.totalScore }}</strong>
               </template>
             </Column>
-            <Column header="Seçilen Takımlar" header-class="selections-col" body-class="selections-col">
+            <Column
+              header="Seçilen Takımlar"
+              header-class="selections-col"
+              body-class="selections-col"
+              style="min-width: 16rem"
+            >
               <template #body="{ data }">
                 <span :class="{ 'text-muted': !data.hasSelections }">
                   {{ formatSelections(data) }}
@@ -444,6 +449,11 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
   white-space: nowrap;
 }
 
+.leaderboard-card :deep(.player-name-col),
+.leaderboard-card :deep(.selections-col) {
+  white-space: nowrap;
+}
+
 .teams-table :deep(.p-datatable-tbody > tr),
 .players-table :deep(.p-datatable-tbody > tr),
 .group-standings-card :deep(.p-datatable-tbody > tr) {
@@ -483,12 +493,6 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 @media (max-width: 768px) {
   .groups-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .leaderboard-card :deep(.selections-col) {
-    display: none;
   }
 }
 </style>

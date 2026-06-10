@@ -93,7 +93,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
       Rastgele mod şu anda kapalı.
     </Message>
 
-    <Card v-else>
+    <Card v-else class="leaderboard-card">
       <template #content>
         <DataTable
           :value="entries"
@@ -108,17 +108,22 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
               <span class="rank-cell">{{ rankLabel(data.rank) }}</span>
             </template>
           </Column>
-          <Column header="Oyuncu">
+          <Column header="Oyuncu" body-class="player-name-col" style="min-width: 7rem">
             <template #body="{ data }">
               <span class="name-cell">{{ data.displayName }}</span>
             </template>
           </Column>
-          <Column field="totalScore" header="Toplam Puan" style="width: 8rem">
+          <Column field="totalScore" header="Toplam Puan" style="width: 8rem; min-width: 8rem">
             <template #body="{ data }">
               <strong>{{ data.totalScore }}</strong>
             </template>
           </Column>
-          <Column header="Atanan Takımlar">
+          <Column
+            header="Atanan Takımlar"
+            header-class="selections-col"
+            body-class="selections-col"
+            style="min-width: 16rem"
+          >
             <template #body="{ data }">
               <span :class="{ 'text-muted': !data.hasSelections }">
                 {{ formatSelections(data) }}
@@ -133,3 +138,29 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
     </Card>
   </div>
 </template>
+
+<style scoped>
+.leaderboard-card :deep(.p-card-body) {
+  padding-top: 0.85rem;
+}
+
+.rank-cell {
+  font-weight: 600;
+  min-width: 2rem;
+  display: inline-block;
+  text-align: center;
+}
+
+.name-cell {
+  font-weight: 500;
+}
+
+.leaderboard-card :deep(.player-name-col),
+.leaderboard-card :deep(.selections-col) {
+  white-space: nowrap;
+}
+
+.players-table :deep(.p-datatable-tbody > tr) {
+  cursor: pointer;
+}
+</style>
