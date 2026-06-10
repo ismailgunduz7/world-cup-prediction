@@ -65,12 +65,12 @@ const tabs: { key: LeaderboardTab; label: string }[] = [
 
 type PlayerEntry = {
   rank: number;
-  userId: string;
+  username: string;
   displayName: string;
   totalScore: number;
   isCurrentUser: boolean;
   hasSelections: boolean;
-  selections: Array<{ team: { name_tr: string; total_points: number }; selectedAt: string }>;
+  selections: Array<{ name: string; points: number }>;
 };
 
 type TeamEntry = {
@@ -78,7 +78,7 @@ type TeamEntry = {
   teamId: number;
   name: string;
   groupCode: string;
-  tier: { name_tr: string };
+  tierName: string | null;
   totalPoints: number;
   isUserSelection: boolean;
 };
@@ -108,7 +108,7 @@ onMounted(async () => {
 function formatSelections(entry: PlayerEntry) {
   if (!entry.hasSelections) return 'Seçim yapılmadı';
   return entry.selections
-    .map((s) => `${s.team.name_tr} (${s.team.total_points}p)`)
+    .map((s) => `${s.name} (${s.points}p)`)
     .join(', ');
 }
 
@@ -178,7 +178,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 
   router.push({
     name: 'player-points',
-    params: { id: entry.userId },
+    params: { id: entry.username },
     query: { from: 'leaderboard' },
   });
 }
@@ -261,7 +261,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
             </Column>
             <Column header="Tier" style="width: 8rem">
               <template #body="{ data }">
-                <Tag :value="data.tier.name_tr" severity="info" class="table-tag" />
+                <Tag v-if="data.tierName" :value="data.tierName" severity="info" class="table-tag" />
               </template>
             </Column>
             <Column header="Grup" style="min-width: 6.5rem; width: 6.5rem">

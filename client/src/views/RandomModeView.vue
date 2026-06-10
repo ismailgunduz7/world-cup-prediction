@@ -12,16 +12,15 @@ import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import api from '@/api/client';
 
-type Tier = { id: number; name_tr: string };
+type Tier = { id: number; name: string };
 type Team = {
   id: number;
-  name_tr: string;
-  group_code: string;
-  tier: { name_tr: string };
-  total_points?: number;
+  name: string;
+  groupCode: string;
+  tierName: string | null;
 };
 type SlotTeam = { slot: number; team: Team | null };
-type GroupTeam = { id: number; name_tr: string };
+type GroupTeam = { id: number; name: string };
 type Group = { code: string; teams: GroupTeam[] };
 type RandomCondition = 'fully_random' | 'exclude_own' | 'never_picked';
 
@@ -91,12 +90,14 @@ onMounted(async () => {
   noSameGroup.value = mine.noSameGroup === true;
   slots.value = mine.teams ?? [];
   for (const s of slots.value) {
-    if (s.team) display.value[s.slot] = s.team.name_tr;
+    if (s.team) display.value[s.slot] = s.team.name;
   }
 
   tiers.value = teamsRes.data.tiers ?? [];
   groups.value = teamsRes.data.groups ?? [];
-  allTeamNames.value = (teamsRes.data.teams ?? []).map((t: Team) => t.name_tr);
+  allTeamNames.value = ((teamsRes.data.groups ?? []) as Group[])
+    .flatMap((g) => g.teams)
+    .map((t) => t.name);
 
   loading.value = false;
   document.addEventListener('click', closeGroupPopover);
@@ -108,7 +109,7 @@ onUnmounted(() => {
 
 function teamsInGroup(groupCode: string) {
   const group = groups.value.find((g) => g.code === groupCode);
-  return [...(group?.teams ?? [])].sort((a, b) => a.name_tr.localeCompare(b.name_tr, 'tr'));
+  return [...(group?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 }
 
 function toggleGroupPopover(slot: number) {
@@ -147,7 +148,7 @@ async function spinSlot(slot: number, finalName: string, duration = 1100) {
 
 async function revealSequentially(reveal: SlotTeam[]) {
   for (const s of reveal.sort((a, b) => a.slot - b.slot)) {
-    if (s.team) await spinSlot(s.slot, s.team.name_tr);
+    if (s.team) await spinSlot(s.slot, s.team.name);
   }
 }
 
@@ -183,7 +184,7 @@ async function reroll(slot: number) {
     rerollUsed.value = data.rerollUsed;
     slots.value = data.teams;
     const updated = (data.teams as SlotTeam[]).find((s) => s.slot === slot);
-    if (updated?.team) await spinSlot(slot, updated.team.name_tr);
+    if (updated?.team) await spinSlot(slot, updated.team.name);
   } catch (err: unknown) {
     const message =
       (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -304,7 +305,7 @@ const slotNumbers = [1, 2, 3];
                   :disabled="configLocked"
                   @click.prevent="toggleTier(tier.id)"
                 />
-                <span>{{ tier.name_tr }}</span>
+                <span>{{ tier.name }}</span>
               </label>
             </div>
             <Message
@@ -351,17 +352,17 @@ const slotNumbers = [1, 2, 3];
                   v-if="teamForSlot(slot) && !spinningSlots.has(slot)"
                   class="rm-slot-tags"
                 >
-                  <Tag :value="teamForSlot(slot)!.tier.name_tr" severity="info" />
+                  <Tag v-if="teamForSlot(slot)!.tierName" :value="teamForSlot(slot)!.tierName!" severity="info" />
                   <span class="group-chip-wrap" @click.stop>
                     <button
                       type="button"
                       class="group-chip-btn"
                       :aria-expanded="openGroupSlot === slot"
-                      :aria-label="`Grup ${teamForSlot(slot)!.group_code} takımlarını göster`"
+                      :aria-label="`Grup ${teamForSlot(slot)!.groupCode} takımlarını göster`"
                       @click="toggleGroupPopover(slot)"
                     >
                       <Tag
-                        :value="`Grup ${teamForSlot(slot)!.group_code}`"
+                        :value="`Grup ${teamForSlot(slot)!.groupCode}`"
                         severity="secondary"
                         class="group-chip"
                       />
@@ -371,14 +372,14 @@ const slotNumbers = [1, 2, 3];
                       :class="{ 'is-open': openGroupSlot === slot }"
                       role="tooltip"
                     >
-                      <p class="group-tooltip-title">Grup {{ teamForSlot(slot)!.group_code }}</p>
+                      <p class="group-tooltip-title">Grup {{ teamForSlot(slot)!.groupCode }}</p>
                       <ul class="group-tooltip-list">
                         <li
-                          v-for="groupTeam in teamsInGroup(teamForSlot(slot)!.group_code)"
+                          v-for="groupTeam in teamsInGroup(teamForSlot(slot)!.groupCode)"
                           :key="groupTeam.id"
                           :class="{ 'is-current': groupTeam.id === teamForSlot(slot)!.id }"
                         >
-                          {{ groupTeam.name_tr }}
+                          {{ groupTeam.name }}
                         </li>
                       </ul>
                     </div>

@@ -15,7 +15,7 @@ import type { PosterGroup, PosterThirdPick } from '@/types/bracket-export';
 import type { BracketPreview, BracketTeam, ResolvedMatch } from '@/types/bracket';
 import { isBracketFullyPicked, pruneWinners, resolveBracket } from '@/utils/bracket';
 
-type GroupTeam = { id: number; name_tr: string; tier?: { name_tr: string } | null };
+type GroupTeam = { id: number; name: string; tier?: { name: string } | null };
 type Group = { code: string; teams: GroupTeam[] };
 
 const MAX_THIRDS = 8;
@@ -54,7 +54,7 @@ onMounted(async () => {
 function teamName(teamId: number): string {
   for (const group of groups.value) {
     const team = group.teams.find((t) => t.id === teamId);
-    if (team) return team.name_tr;
+    if (team) return team.name;
   }
   return '—';
 }
@@ -63,7 +63,7 @@ const tierByTeamId = computed(() => {
   const map = new Map<number, string>();
   for (const group of groups.value) {
     for (const team of group.teams) {
-      if (team.tier?.name_tr) map.set(team.id, team.tier.name_tr);
+      if (team.tier?.name) map.set(team.id, team.tier.name);
     }
   }
   return map;

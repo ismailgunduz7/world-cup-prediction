@@ -23,12 +23,12 @@ function teamsByTier(tierId: number, groups: GuideGroup[]) {
   return groups
     .flatMap((g) => g.teams)
     .filter((t) => t.tier?.id === tierId)
-    .sort((a, b) => a.name_tr.localeCompare(b.name_tr, 'tr'));
+    .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 }
 
 function teamsInGroup(groupCode: string, groups: GuideGroup[]) {
   const group = groups.find((g) => g.code === groupCode);
-  return [...(group?.teams ?? [])].sort((a, b) => a.name_tr.localeCompare(b.name_tr, 'tr'));
+  return [...(group?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 }
 
 function toggleGroupPopover(teamId: number) {
@@ -69,7 +69,7 @@ onUnmounted(() => {
       <div v-show="activeGuideTab === 'tiers'" class="guide-tab-panel" role="tabpanel">
         <div class="tier-grid">
           <Card v-for="tier in tiers" :key="tier.id">
-            <template #title>{{ tier.name_tr }}</template>
+            <template #title>{{ tier.name }}</template>
             <template #content>
               <ul class="team-list">
                 <li v-for="team in teamsByTier(tier.id, groups)" :key="team.id">
@@ -77,31 +77,31 @@ onUnmounted(() => {
                     :to="{ name: 'team-matches', params: { id: team.id }, query: { from: 'home' } }"
                     class="team-link"
                   >
-                    {{ team.name_tr }}
+                    {{ team.name }}
                   </RouterLink>
                   <span class="group-chip-wrap" @click.stop>
                     <button
                       type="button"
                       class="group-chip-btn"
                       :aria-expanded="openGroupTeamId === team.id"
-                      :aria-label="`Grup ${team.group_code} takımlarını göster`"
+                      :aria-label="`Grup ${team.groupCode} takımlarını göster`"
                       @click="toggleGroupPopover(team.id)"
                     >
-                      <Tag :value="`Grup ${team.group_code}`" severity="secondary" class="group-chip" />
+                      <Tag :value="`Grup ${team.groupCode}`" severity="secondary" class="group-chip" />
                     </button>
                     <div
                       class="group-tooltip"
                       :class="{ 'is-open': openGroupTeamId === team.id }"
                       role="tooltip"
                     >
-                      <p class="group-tooltip-title">Grup {{ team.group_code }}</p>
+                      <p class="group-tooltip-title">Grup {{ team.groupCode }}</p>
                       <ul class="group-tooltip-list">
                         <li
-                          v-for="groupTeam in teamsInGroup(team.group_code, groups)"
+                          v-for="groupTeam in teamsInGroup(team.groupCode, groups)"
                           :key="groupTeam.id"
                           :class="{ 'is-current': groupTeam.id === team.id }"
                         >
-                          {{ groupTeam.name_tr }}
+                          {{ groupTeam.name }}
                         </li>
                       </ul>
                     </div>
@@ -123,9 +123,9 @@ onUnmounted(() => {
                   :to="{ name: 'team-matches', params: { id: team.id }, query: { from: 'home' } }"
                   class="team-link"
                 >
-                  {{ team.name_tr }}
+                  {{ team.name }}
                 </RouterLink>
-                <Tag :value="team.tier.name_tr" />
+                <Tag v-if="team.tier" :value="team.tier.name" />
               </li>
             </ul>
           </div>

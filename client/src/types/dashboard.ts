@@ -93,12 +93,11 @@ export type DashboardData = {
 
 export type GuideTeam = {
   id: number;
-  name_tr: string;
-  group_code: string;
-  tier: { id: number; code: string; name_tr: string };
-  total_points: number;
+  name: string;
+  groupCode: string;
+  tier: { id: number; name: string } | null;
 };
 
-export type GuideTier = { id: number; code: string; name_tr: string; sort_order: number };
+export type GuideTier = { id: number; name: string };
 
 export type GuideGroup = { code: string; teams: GuideTeam[] };

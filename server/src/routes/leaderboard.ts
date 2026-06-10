@@ -19,7 +19,7 @@ leaderboardRoutes.get('/', async (c) => {
 
   const { data: selections, error: selError } = await supabase
     .from('team_selections')
-    .select('*, team:teams(*, tier:tiers(*))')
+    .select('user_id, team_id, team:teams(name_tr)')
     .order('selected_at');
 
   if (selError) throw selError;
@@ -29,8 +29,14 @@ leaderboardRoutes.get('/', async (c) => {
 
   const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
 
-  const byUser = new Map<string, typeof selections>();
-  for (const sel of selections ?? []) {
+  type SelectionRow = {
+    user_id: string;
+    team_id: number;
+    team: { name_tr: string } | { name_tr: string }[] | null;
+  };
+
+  const byUser = new Map<string, SelectionRow[]>();
+  for (const sel of (selections ?? []) as SelectionRow[]) {
     const list = byUser.get(sel.user_id) ?? [];
     list.push(sel);
     byUser.set(sel.user_id, list);
@@ -44,16 +50,15 @@ leaderboardRoutes.get('/', async (c) => {
     );
 
     return {
-      userId: u.id,
-      displayName: u.display_name,
       username: u.username,
+      displayName: u.display_name,
       isCurrentUser: u.id === user.id,
       totalScore,
       hasSelections: userSelections.length > 0,
-      selections: userSelections.map((s) => ({
-        team: { ...s.team, total_points: pointsMap.get(s.team_id) ?? 0 },
-        selectedAt: s.selected_at,
-      })),
+      selections: userSelections.map((s) => {
+        const team = Array.isArray(s.team) ? s.team[0] ?? null : s.team;
+        return { name: team?.name_tr ?? '—', points: pointsMap.get(s.team_id) ?? 0 };
+      }),
     };
   });
 
@@ -61,24 +66,34 @@ leaderboardRoutes.get('/', async (c) => {
 
   const { data: teams, error: teamError } = await supabase
     .from('teams')
-    .select('id, name_tr, group_code, tier:tiers(id, code, name_tr, sort_order)')
+    .select('id, name_tr, group_code, tier:tiers(name_tr)')
     .eq('is_active', true);
 
   if (teamError) throw teamError;
+
+  type TeamRow = {
+    id: number;
+    name_tr: string;
+    group_code: string;
+    tier: { name_tr: string } | { name_tr: string }[] | null;
+  };
 
   const userSelectedTeamIds = new Set(
     (byUser.get(user.id) ?? []).map((s) => s.team_id),
   );
 
-  const teamStandings = (teams ?? [])
-    .map((team) => ({
-      teamId: team.id,
-      name: team.name_tr,
-      groupCode: team.group_code,
-      tier: team.tier,
-      totalPoints: pointsMap.get(team.id) ?? 0,
-      isUserSelection: userSelectedTeamIds.has(team.id),
-    }))
+  const teamStandings = ((teams ?? []) as TeamRow[])
+    .map((team) => {
+      const tier = Array.isArray(team.tier) ? team.tier[0] ?? null : team.tier;
+      return {
+        teamId: team.id,
+        name: team.name_tr,
+        groupCode: team.group_code,
+        tierName: tier?.name_tr ?? null,
+        totalPoints: pointsMap.get(team.id) ?? 0,
+        isUserSelection: userSelectedTeamIds.has(team.id),
+      };
+    })
     .sort(
       (a, b) =>
         b.totalPoints - a.totalPoints ||

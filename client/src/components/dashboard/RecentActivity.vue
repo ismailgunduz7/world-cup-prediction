@@ -46,7 +46,7 @@ function pointsSeverity(points: number): 'success' | 'danger' {
           </div>
           <ul v-if="item.breakdown.length" class="activity-breakdown">
             <li v-for="(entry, index) in item.breakdown" :key="index">
-              <span>{{ formatRuleDescription({ description_tr: entry.description, points: entry.points }) }}</span>
+              <span>{{ formatRuleDescription({ description: entry.description, points: entry.points }) }}</span>
               <span>{{ formatSigned(entry.points) }}</span>
             </li>
           </ul>

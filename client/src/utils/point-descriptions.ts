@@ -1,7 +1,8 @@
 type PointEntry = {
-  description_tr?: string;
+  description?: string;
   points?: number;
-  rule_type?: { code?: string; name_tr?: string };
+  ruleCode?: string | null;
+  ruleName?: string | null;
 };
 
 export function formatSigned(value: number) {
@@ -10,8 +11,8 @@ export function formatSigned(value: number) {
 }
 
 export function formatRuleDescription(entry: PointEntry) {
-  const desc = entry.description_tr ?? '';
-  const code = entry.rule_type?.code;
+  const desc = entry.description ?? '';
+  const code = entry.ruleCode;
 
   const legacyScored = desc.match(/Attığı gol \((\d+) x (-?\d+(?:\.\d+)?)\)/);
   if (code === 'goals_scored' && legacyScored) {

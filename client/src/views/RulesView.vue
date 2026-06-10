@@ -11,14 +11,14 @@ import api from '@/api/client';
 type RuleRow = {
   id: number;
   points: number;
-  rule_type: {
+  ruleType: {
     id: number;
-    name_tr: string;
-    description_tr: string | null;
-    sort_order?: number;
-    is_active: boolean;
+    name: string;
+    description: string | null;
+    sortOrder?: number;
+    isActive: boolean;
   };
-  tier: { id: number; name_tr: string; sort_order?: number };
+  tier: { id: number; name: string; sortOrder?: number };
 };
 
 type TierColumn = {
@@ -54,8 +54,8 @@ const tierColumns = computed<TierColumn[]>(() => {
     if (!map.has(tier.id)) {
       map.set(tier.id, {
         id: tier.id,
-        label: tier.name_tr,
-        sortOrder: tier.sort_order ?? tier.id,
+        label: tier.name,
+        sortOrder: tier.sortOrder ?? tier.id,
       });
     }
   }
@@ -67,15 +67,15 @@ const matrixRows = computed<MatrixRow[]>(() => {
   const map = new Map<number, MatrixRow>();
 
   for (const rule of rules.value) {
-    const ruleType = rule.rule_type;
-    if (!ruleType.is_active) continue;
+    const ruleType = rule.ruleType;
+    if (!ruleType.isActive) continue;
 
     if (!map.has(ruleType.id)) {
       map.set(ruleType.id, {
         id: ruleType.id,
-        name: ruleType.name_tr,
-        description: ruleType.description_tr,
-        sortOrder: ruleType.sort_order ?? 0,
+        name: ruleType.name,
+        description: ruleType.description,
+        sortOrder: ruleType.sortOrder ?? 0,
         pointsByTier: {},
       });
     }

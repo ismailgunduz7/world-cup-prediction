@@ -89,16 +89,19 @@ function pickTeams(pool: PoolTeam[], count: number, noSameGroup: boolean): numbe
   });
 }
 
-async function loadTeams(teamIds: number[]) {
+type TeamDTO = { id: number; name: string; groupCode: string; tierName: string | null };
+
+async function loadTeams(teamIds: number[]): Promise<TeamDTO[]> {
   if (teamIds.length === 0) return [];
-  const [{ data: teams, error: teamError }, { data: totals, error: totalError }] = await Promise.all([
-    supabase.from('teams').select('*, tier:tiers(*)').in('id', teamIds),
-    supabase.from('team_total_points').select('*').in('team_id', teamIds),
-  ]);
+  const { data: teams, error: teamError } = await supabase
+    .from('teams')
+    .select('id, name_tr, group_code, tier:tiers(name_tr)')
+    .in('id', teamIds);
   if (teamError) throw teamError;
-  if (totalError) throw totalError;
-  const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
-  return (teams ?? []).map((t) => ({ ...t, total_points: pointsMap.get(t.id) ?? 0 }));
+  return (teams ?? []).map((t) => {
+    const tier = Array.isArray(t.tier) ? t.tier[0] ?? null : t.tier;
+    return { id: t.id, name: t.name_tr, groupCode: t.group_code, tierName: tier?.name_tr ?? null };
+  });
 }
 
 async function getEntryWithTeams(userId: string) {
@@ -295,7 +298,7 @@ randomModeRoutes.get('/leaderboard', async (c) => {
 
   const { data: slots, error: slotError } = await supabase
     .from('random_mode_teams')
-    .select('user_id, slot, team:teams(*, tier:tiers(*))')
+    .select('user_id, slot, team:teams(id, name_tr)')
     .order('slot');
   if (slotError) throw slotError;
 
@@ -303,8 +306,14 @@ randomModeRoutes.get('/leaderboard', async (c) => {
   if (totalError) throw totalError;
   const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
 
-  const byUser = new Map<string, typeof slots>();
-  for (const row of slots ?? []) {
+  type SlotRow = {
+    user_id: string;
+    slot: number;
+    team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
+  };
+
+  const byUser = new Map<string, SlotRow[]>();
+  for (const row of (slots ?? []) as SlotRow[]) {
     const list = byUser.get(row.user_id) ?? [];
     list.push(row);
     byUser.set(row.user_id, list);
@@ -312,21 +321,18 @@ randomModeRoutes.get('/leaderboard', async (c) => {
 
   const entries = (users ?? []).map((u) => {
     const userSlots = byUser.get(u.id) ?? [];
-    const totalScore = userSlots.reduce((sum, s) => {
-      const team = s.team as unknown as { id: number };
-      return sum + (pointsMap.get(team.id) ?? 0);
-    }, 0);
+    const teams = userSlots.map((s) => (Array.isArray(s.team) ? s.team[0] ?? null : s.team));
+    const totalScore = teams.reduce((sum, team) => sum + (team ? pointsMap.get(team.id) ?? 0 : 0), 0);
     return {
-      userId: u.id,
-      displayName: u.display_name,
       username: u.username,
+      displayName: u.display_name,
       isCurrentUser: u.id === user.id,
       totalScore,
       hasSelections: userSlots.length > 0,
-      selections: userSlots.map((s) => {
-        const team = s.team as unknown as { id: number };
-        return { team: { ...s.team, total_points: pointsMap.get(team.id) ?? 0 } };
-      }),
+      selections: teams.map((team) => ({
+        name: team?.name_tr ?? '—',
+        points: team ? pointsMap.get(team.id) ?? 0 : 0,
+      })),
     };
   });
 

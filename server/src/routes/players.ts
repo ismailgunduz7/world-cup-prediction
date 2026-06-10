@@ -1,19 +1,20 @@
 import { Hono } from 'hono';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
+import { toMatchSummary, toPointEntry } from '../lib/serializers.js';
 
 const playerRoutes = new Hono<{ Variables: AppVariables }>();
 
 playerRoutes.use('*', authMiddleware, participantMiddleware);
 
-playerRoutes.get('/:userId/points', async (c) => {
-  const userId = c.req.param('userId');
+playerRoutes.get('/:username/points', async (c) => {
+  const username = c.req.param('username');
   const mode = c.req.query('mode') === 'random' ? 'random' : 'real';
 
   const { data: player, error: playerError } = await supabase
     .from('users')
-    .select('id, username, display_name')
-    .eq('id', userId)
+    .select('id, display_name')
+    .eq('username', username)
     .eq('is_admin', false)
     .maybeSingle();
 
@@ -28,13 +29,13 @@ playerRoutes.get('/:userId/points', async (c) => {
     mode === 'random'
       ? await supabase
           .from('random_mode_teams')
-          .select('team_id, selected_at, team:teams(*, tier:tiers(*))')
-          .eq('user_id', userId)
+          .select('team_id, team:teams(id, name_tr, group_code, tier:tiers(name_tr))')
+          .eq('user_id', player.id)
           .order('slot')
       : await supabase
           .from('team_selections')
-          .select('*, team:teams(*, tier:tiers(*))')
-          .eq('user_id', userId)
+          .select('team_id, team:teams(id, name_tr, group_code, tier:tiers(name_tr))')
+          .eq('user_id', player.id)
           .order('selected_at');
 
   if (selError) throw selError;
@@ -42,12 +43,7 @@ playerRoutes.get('/:userId/points', async (c) => {
   const teamIds = (selections ?? []).map((s) => s.team_id);
   if (teamIds.length === 0) {
     return c.json({
-      player: {
-        id: player.id,
-        displayName: player.display_name,
-        username: player.username,
-        totalScore: 0,
-      },
+      player: { displayName: player.display_name, totalScore: 0 },
       hasSelections: false,
       teams: [],
     });
@@ -64,7 +60,7 @@ playerRoutes.get('/:userId/points', async (c) => {
 
   const { data: allPointEntries, error: peError } = await supabase
     .from('team_point_entries')
-    .select('*, rule_type:scoring_rule_types(code, name_tr, category)')
+    .select('team_id, match_id, points, description_tr, rule_type:scoring_rule_types(code, name_tr)')
     .in('team_id', teamIds)
     .order('earned_at', { nullsFirst: false });
 
@@ -79,18 +75,19 @@ playerRoutes.get('/:userId/points', async (c) => {
 
   const teams = await Promise.all(
     (selections ?? []).map(async (selection) => {
-      const team = selection.team as {
+      const raw = (Array.isArray(selection.team) ? selection.team[0] : selection.team) as {
         id: number;
         name_tr: string;
         group_code: string;
-        tier: { id: number; code: string; name_tr: string };
+        tier: { name_tr: string } | { name_tr: string }[] | null;
       };
-      const teamId = team.id;
+      const tier = Array.isArray(raw.tier) ? raw.tier[0] ?? null : raw.tier;
+      const teamId = raw.id;
 
       const { data: matches, error: matchError } = await supabase
         .from('matches')
         .select(
-          '*, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)',
+          'id, stage, status, scheduled_at, home_score, away_score, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
         )
         .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
         .eq('status', 'finished')
@@ -108,41 +105,32 @@ playerRoutes.get('/:userId/points', async (c) => {
         pointsByMatch.set(entry.match_id, list);
       }
 
-      const finishedMatches = (matches ?? []).map((match) => {
-        const breakdown = pointsByMatch.get(match.id) ?? [];
-        const matchPoints = breakdown.reduce((sum, e) => sum + Number(e.points), 0);
-        return {
-          ...match,
-          point_breakdown: breakdown,
-          match_points: matchPoints,
-        };
-      });
+      const finishedMatches = (matches ?? []).map((match) =>
+        toMatchSummary(match as never, (pointsByMatch.get(match.id) ?? []) as never),
+      );
 
-      const bonusEntries = teamEntries.filter((entry) => entry.match_id === null);
+      const bonusEntries = teamEntries
+        .filter((entry) => entry.match_id === null)
+        .map((entry) => toPointEntry(entry as never));
 
       return {
         team: {
-          ...team,
-          total_points: pointsMap.get(teamId) ?? 0,
+          id: teamId,
+          name: raw.name_tr,
+          groupCode: raw.group_code,
+          tierName: tier?.name_tr ?? null,
+          totalPoints: pointsMap.get(teamId) ?? 0,
         },
-        selectedAt: selection.selected_at,
         finishedMatches,
         bonusEntries,
-        matchPointsTotal: finishedMatches.reduce((sum, m) => sum + m.match_points, 0),
-        bonusPointsTotal: bonusEntries.reduce((sum, e) => sum + Number(e.points), 0),
       };
     }),
   );
 
-  const totalScore = teams.reduce((sum, t) => sum + t.team.total_points, 0);
+  const totalScore = teams.reduce((sum, t) => sum + t.team.totalPoints, 0);
 
   return c.json({
-    player: {
-      id: player.id,
-      displayName: player.display_name,
-      username: player.username,
-      totalScore,
-    },
+    player: { displayName: player.display_name, totalScore },
     hasSelections: true,
     teams,
   });

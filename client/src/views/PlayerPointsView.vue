@@ -17,31 +17,32 @@ import api from '@/api/client';
 import { formatRuleDescription, formatSigned } from '@/utils/point-descriptions';
 
 type PointEntry = {
-  description_tr: string;
+  description: string;
   points: number;
-  rule_type?: { code?: string; name_tr?: string };
+  ruleCode?: string | null;
+  ruleName?: string | null;
 };
 
 type FinishedMatch = {
   id: number;
   stage: string;
   status: string;
-  scheduled_at: string;
-  home_score: number | null;
-  away_score: number | null;
-  home_team: { name_tr: string };
-  away_team: { name_tr: string };
-  point_breakdown: PointEntry[];
-  match_points: number;
+  scheduledAt: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeTeam: string;
+  awayTeam: string;
+  breakdown: PointEntry[];
+  points: number;
 };
 
 type TeamSection = {
   team: {
     id: number;
-    name_tr: string;
-    group_code: string;
-    total_points: number;
-    tier: { name_tr: string };
+    name: string;
+    groupCode: string;
+    totalPoints: number;
+    tierName: string | null;
   };
   finishedMatches: FinishedMatch[];
   bonusEntries: PointEntry[];
@@ -101,10 +102,10 @@ function formatDate(iso: string) {
 }
 
 function matchLabel(match: FinishedMatch) {
-  const home = match.home_team.name_tr;
-  const away = match.away_team.name_tr;
-  if (match.home_score !== null) {
-    return `${home} ${match.home_score}-${match.away_score} ${away}`;
+  const home = match.homeTeam;
+  const away = match.awayTeam;
+  if (match.homeScore !== null) {
+    return `${home} ${match.homeScore}-${match.awayScore} ${away}`;
   }
   return `${home} vs ${away}`;
 }
@@ -169,16 +170,16 @@ function goToTeam(teamId: number) {
       <Card>
         <template #title>
           <button type="button" class="team-link" @click="goToTeam(section.team.id)">
-            {{ section.team.name_tr }}
+            {{ section.team.name }}
           </button>
         </template>
         <template #content>
           <div class="tag-row">
-            <Tag :value="section.team.tier.name_tr" />
-            <Tag :value="`Grup ${section.team.group_code}`" severity="secondary" />
+            <Tag v-if="section.team.tierName" :value="section.team.tierName" />
+            <Tag :value="`Grup ${section.team.groupCode}`" severity="secondary" />
             <Tag
-              :value="`${section.team.total_points} puan`"
-              :severity="pointsSeverity(section.team.total_points)"
+              :value="`${section.team.totalPoints} puan`"
+              :severity="pointsSeverity(section.team.totalPoints)"
             />
           </div>
         </template>
@@ -200,16 +201,16 @@ function goToTeam(teamId: number) {
                 <div class="tag-row">
                   <Tag :value="stageLabels[match.stage] ?? match.stage" />
                   <Tag
-                    :value="`${match.match_points} puan`"
-                    :severity="pointsSeverity(match.match_points)"
+                    :value="`${match.points} puan`"
+                    :severity="pointsSeverity(match.points)"
                   />
-                  <span class="text-muted match-date">{{ formatDate(match.scheduled_at) }}</span>
+                  <span class="text-muted match-date">{{ formatDate(match.scheduledAt) }}</span>
                 </div>
               </div>
             </AccordionHeader>
             <AccordionContent>
-              <div v-if="match.point_breakdown.length">
-                <DataTable :value="match.point_breakdown" size="small" responsive-layout="scroll">
+              <div v-if="match.breakdown.length">
+                <DataTable :value="match.breakdown" size="small" responsive-layout="scroll">
                   <Column header="Kural">
                     <template #body="{ data }">
                       {{ formatRuleDescription(data) }}

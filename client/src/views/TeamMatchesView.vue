@@ -17,16 +17,17 @@ import api from '@/api/client';
 import { formatRuleDescription, formatSigned } from '@/utils/point-descriptions';
 
 type PointEntry = {
-  description_tr: string;
+  description: string;
   points: number;
-  rule_type?: { code?: string; name_tr?: string };
+  ruleCode?: string | null;
+  ruleName?: string | null;
 };
 
 const route = useRoute();
 const router = useRouter();
 const loading = ref(true);
 const loadError = ref('');
-const team = ref<{ name_tr: string; tier: { name_tr: string; code: string }; group_code: string } | null>(null);
+const team = ref<{ name: string; tierName: string | null; groupCode: string } | null>(null);
 const matches = ref<Array<Record<string, unknown>>>([]);
 const bonusEntries = ref<PointEntry[]>([]);
 const totalPoints = ref(0);
@@ -70,8 +71,8 @@ onMounted(async () => {
     const { data } = await api.get(`/teams/${route.params.id}/matches`);
     team.value = data.team;
     matches.value = data.matches;
-    bonusEntries.value = data.bonus_entries ?? [];
-    totalPoints.value = data.total_points;
+    bonusEntries.value = data.bonusEntries ?? [];
+    totalPoints.value = data.totalPoints;
   } catch (err: unknown) {
     loadError.value =
       (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -92,18 +93,18 @@ function formatDate(iso: string) {
 }
 
 function matchLabel(match: Record<string, unknown>) {
-  const home = (match.home_team as { name_tr: string }).name_tr;
-  const away = (match.away_team as { name_tr: string }).name_tr;
+  const home = match.homeTeam as string;
+  const away = match.awayTeam as string;
 
-  if (match.status === 'finished' && match.home_score !== null) {
-    return `${home} ${match.home_score}-${match.away_score} ${away}`;
+  if (match.status === 'finished' && match.homeScore !== null) {
+    return `${home} ${match.homeScore}-${match.awayScore} ${away}`;
   }
 
   return `${home} vs ${away}`;
 }
 
 function matchTotal(match: Record<string, unknown>) {
-  return Number(match.match_cumulative_points ?? 0);
+  return Number(match.points ?? 0);
 }
 
 function pointsSeverity(points: number): 'success' | 'danger' {
@@ -137,13 +138,13 @@ function goBack() {
       <Button icon="pi pi-arrow-left" label="Geri" severity="secondary" text @click="goBack" />
     </div>
 
-    <PageHeader :title="team.name_tr" subtitle="Maçlar ve puan detayları" />
+    <PageHeader :title="team.name" subtitle="Maçlar ve puan detayları" />
 
     <Card>
       <template #content>
         <div class="tag-row">
-          <Tag :value="team.tier.name_tr" />
-          <Tag :value="`Grup ${team.group_code}`" severity="secondary" />
+          <Tag v-if="team.tierName" :value="team.tierName" />
+          <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
           <Tag :value="`${totalPoints} puan`" :severity="pointsSeverity(totalPoints)" />
         </div>
       </template>
@@ -170,13 +171,13 @@ function goBack() {
                   :value="`${matchTotal(match)} puan`"
                   :severity="pointsSeverity(matchTotal(match))"
                 />
-                <span class="text-muted match-date">{{ formatDate(String(match.scheduled_at)) }}</span>
+                <span class="text-muted match-date">{{ formatDate(String(match.scheduledAt)) }}</span>
               </div>
             </div>
           </AccordionHeader>
           <AccordionContent>
-            <div v-if="match.status === 'finished' && (match.point_breakdown as PointEntry[])?.length">
-              <DataTable :value="match.point_breakdown as PointEntry[]" size="small" responsive-layout="scroll">
+            <div v-if="match.status === 'finished' && (match.breakdown as PointEntry[])?.length">
+              <DataTable :value="match.breakdown as PointEntry[]" size="small" responsive-layout="scroll">
                 <Column header="Kural">
                   <template #body="{ data }">
                     {{ formatRuleDescription(data) }}

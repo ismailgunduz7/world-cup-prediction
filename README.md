@@ -483,11 +483,12 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 | Method  | Endpoint              | Açıklama                                              |
 | ------- | --------------------- | ----------------------------------------------------- |
-| GET/PUT | `/selections`         | Takım seçimleri                                       |
+| GET/PUT | `/selections`         | Takım seçimleri (`{ teamIds }`)                       |
+| GET     | `/teams`              | Tier + grup listesi (tek kaynak `groups`)             |
 | GET     | `/leaderboard`        | Sıralama tablosu                                      |
-| GET     | `/players/:id`        | Oyuncu puan detayı                                    |
-| GET     | `/teams/:id`          | Takım maçları ve puanları                             |
-| GET     | `/groups`             | Grup puan durumları                                   |
+| GET     | `/players/:username/points` | Oyuncu puan detayı (username ile)               |
+| GET     | `/teams/:id/matches`  | Takım maçları ve puanları                             |
+| GET     | `/groups/standings`   | Grup puan durumları                                   |
 | GET     | `/groups/best-thirds` | En iyi 3.ler sıralaması                               |
 | POST    | `/bracket/preview`    | Bracket tahmin önizlemesi (stateless, salt-okunur)    |
 | GET     | `/scoring-rules`      | Aktif puan kuralları                                  |
@@ -495,6 +496,15 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | POST    | `/random-mode/trigger`| Rastgele 3 takım ata (koşul + tier; config'i kilitler)|
 | POST    | `/random-mode/reroll` | Tek bir takımı yeniden ata (bir kez)                  |
 | GET     | `/random-mode/leaderboard` | Rastgele mod sıralaması                           |
+
+> **Yanıt sözleşmesi (katılımcı endpoint’leri).** Bu endpoint’ler ham DB satırları yerine
+> yalnızca FE’nin kullandığı alanları, FE’ye uygun **camelCase** isimlerle döndürür
+> (`name`, `groupCode`, `tierName`, `totalPoints`, `scheduledAt`, puan kayıtları
+> `{ description, points, ruleCode, ruleName }`). Leaderboard’lar **başka kullanıcıların
+> UUID/username’ini sızdırmaz**; oyuncu detayına gidiş `username` üzerindendir. `GET /teams`
+> takımları tek kaynak olarak `groups` altında verir (eski tekrar eden düz `teams` dizisi
+> kaldırıldı). Admin endpoint’leri bu sadeleştirmenin dışındadır. Ortak DTO dönüştürücüleri
+> `server/src/lib/serializers.ts` içinde toplanır.
 
 ### Admin (seçilmiş)
 

@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import Button from 'primevue/button';
 
-type GroupTeam = { id: number; name_tr: string; tier?: { name_tr: string } | null };
+type GroupTeam = { id: number; name: string; tier?: { name: string } | null };
 type Group = { code: string; teams: GroupTeam[] };
 
 const props = defineProps<{
@@ -24,12 +24,12 @@ const overIndex = ref<number | null>(null);
 
 function teamName(code: string, teamId: number): string {
   const group = props.groups.find((g) => g.code === code);
-  return group?.teams.find((t) => t.id === teamId)?.name_tr ?? '—';
+  return group?.teams.find((t) => t.id === teamId)?.name ?? '—';
 }
 
 function teamTier(code: string, teamId: number): string | null {
   const group = props.groups.find((g) => g.code === code);
-  return group?.teams.find((t) => t.id === teamId)?.tier?.name_tr ?? null;
+  return group?.teams.find((t) => t.id === teamId)?.tier?.name ?? null;
 }
 
 function orderedIds(code: string): number[] {

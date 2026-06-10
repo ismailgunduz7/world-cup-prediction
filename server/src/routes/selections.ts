@@ -16,30 +16,15 @@ selectionRoutes.get('/mine', async (c) => {
 
   const { data, error } = await supabase
     .from('team_selections')
-    .select('*, team:teams(*, tier:tiers(*))')
+    .select('team_id')
     .eq('user_id', user.id)
     .order('selected_at');
 
   if (error) throw error;
 
   const teamIds = (data ?? []).map((s) => s.team_id);
-  let totals: Record<number, number> = {};
 
-  if (teamIds.length > 0) {
-    const { data: points } = await supabase
-      .from('team_total_points')
-      .select('*')
-      .in('team_id', teamIds);
-
-    totals = Object.fromEntries((points ?? []).map((p) => [p.team_id, Number(p.total_points)]));
-  }
-
-  const selections = (data ?? []).map((s) => ({
-    ...s,
-    team: { ...s.team, total_points: totals[s.team_id] ?? 0 },
-  }));
-
-  return c.json({ selections, selectionsLocked: locked, maxSelections: MAX_SELECTIONS });
+  return c.json({ teamIds, selectionsLocked: locked, maxSelections: MAX_SELECTIONS });
 });
 
 selectionRoutes.put('/', async (c) => {
@@ -87,13 +72,13 @@ selectionRoutes.put('/', async (c) => {
 
   const { data, error } = await supabase
     .from('team_selections')
-    .select('*, team:teams(*, tier:tiers(*))')
+    .select('team_id')
     .eq('user_id', user.id)
     .order('selected_at');
 
   if (error) throw error;
 
-  return c.json({ selections: data, selectionsLocked: false });
+  return c.json({ teamIds: (data ?? []).map((s) => s.team_id), selectionsLocked: false });
 });
 
 export default selectionRoutes;

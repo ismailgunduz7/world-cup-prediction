@@ -13,12 +13,12 @@ import api from '@/api/client';
 
 type PlayerEntry = {
   rank: number;
-  userId: string;
+  username: string;
   displayName: string;
   totalScore: number;
   isCurrentUser: boolean;
   hasSelections: boolean;
-  selections: Array<{ team: { name_tr: string; total_points: number } }>;
+  selections: Array<{ name: string; points: number }>;
 };
 
 const router = useRouter();
@@ -39,7 +39,7 @@ onMounted(async () => {
 
 function formatSelections(entry: PlayerEntry) {
   if (!entry.hasSelections) return 'Atama yapılmadı';
-  return entry.selections.map((s) => `${s.team.name_tr} (${s.team.total_points}p)`).join(', ');
+  return entry.selections.map((s) => `${s.name} (${s.points}p)`).join(', ');
 }
 
 function playerRowClass(data: PlayerEntry) {
@@ -67,7 +67,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 
   router.push({
     name: 'player-points',
-    params: { id: entry.userId },
+    params: { id: entry.username },
     query: { from: 'random-leaderboard', mode: 'random' },
   });
 }

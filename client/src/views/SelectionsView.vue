@@ -20,10 +20,12 @@ import {
 
 type Team = {
   id: number;
-  name_tr: string;
-  group_code: string;
-  tier: { name_tr: string };
+  name: string;
+  groupCode: string;
+  tierName: string | null;
 };
+
+type Group = { code: string; teams: Team[] };
 
 const toast = useToast();
 const router = useRouter();
@@ -40,8 +42,10 @@ const maxSelections = 3;
 
 onMounted(async () => {
   const [teamsRes, selRes] = await Promise.all([api.get('/teams'), api.get('/selections/mine')]);
-  allTeams.value = teamsRes.data.teams;
-  savedSelectedIds.value = selRes.data.selections.map((s: { team_id: number }) => s.team_id);
+  allTeams.value = (teamsRes.data.groups as Group[])
+    .flatMap((g) => g.teams)
+    .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  savedSelectedIds.value = selRes.data.teamIds;
   selectionsLocked.value = selRes.data.selectionsLocked;
 
   const userId = auth.user?.id;
@@ -161,10 +165,10 @@ async function save() {
         <div v-if="selectionsLocked" class="selections-grid mt-3">
           <div v-for="team in visibleTeams" :key="team.id" class="team-tile team-tile-locked">
             <div>
-              <strong>{{ team.name_tr }}</strong>
+              <strong>{{ team.name }}</strong>
               <div class="tag-row mt-1">
-                <Tag :value="team.tier.name_tr" severity="info" />
-                <Tag :value="`Grup ${team.group_code}`" severity="secondary" />
+                <Tag v-if="team.tierName" :value="team.tierName" severity="info" />
+                <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
               </div>
             </div>
           </div>
@@ -184,10 +188,10 @@ async function save() {
               @click.prevent="toggleTeam(team.id)"
             />
             <div>
-              <strong>{{ team.name_tr }}</strong>
+              <strong>{{ team.name }}</strong>
               <div class="tag-row mt-1">
-                <Tag :value="team.tier.name_tr" severity="info" />
-                <Tag :value="`Grup ${team.group_code}`" severity="secondary" />
+                <Tag v-if="team.tierName" :value="team.tierName" severity="info" />
+                <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
               </div>
             </div>
           </label>
@@ -212,7 +216,7 @@ async function save() {
           <Button
             v-for="id in savedSelectedIds"
             :key="id"
-            :label="`${allTeams.find((t) => t.id === id)?.name_tr} Maçları`"
+            :label="`${allTeams.find((t) => t.id === id)?.name} Maçları`"
             icon="pi pi-calendar"
             severity="secondary"
             outlined
