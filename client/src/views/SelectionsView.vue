@@ -23,7 +23,7 @@ type Team = {
   id: number;
   name: string;
   groupCode: string;
-  tierName: string | null;
+  tier: { id: number; name: string } | null;
 };
 
 type Group = { code: string; teams: Team[] };
@@ -47,7 +47,7 @@ onMounted(async () => {
     reference.ensureTeams(),
     api.get('/selections/mine'),
   ]);
-  allTeams.value = (teamsData.groups as unknown as Group[])
+  allTeams.value = (teamsData.groups as Group[])
     .flatMap((g) => g.teams)
     .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   savedSelectedIds.value = selRes.data.teamIds;
@@ -176,7 +176,7 @@ async function save() {
             <div>
               <strong>{{ team.name }}</strong>
               <div class="tag-row mt-1">
-                <Tag v-if="team.tierName" :value="team.tierName" severity="info" />
+                <Tag v-if="team.tier" :value="team.tier.name" severity="info" />
                 <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
               </div>
             </div>
@@ -199,7 +199,7 @@ async function save() {
             <div>
               <strong>{{ team.name }}</strong>
               <div class="tag-row mt-1">
-                <Tag v-if="team.tierName" :value="team.tierName" severity="info" />
+                <Tag v-if="team.tier" :value="team.tier.name" severity="info" />
                 <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
               </div>
             </div>
