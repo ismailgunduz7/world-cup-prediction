@@ -243,7 +243,19 @@ async function buildKnockoutAdvancementEntries(
   return entries;
 }
 
+type MedalEntry = {
+  team_id: number;
+  rule_type_id: number;
+  match_id: number | null;
+  source_key: string;
+  points: number;
+  description_tr: string;
+  earned_at: string | null;
+};
+
 async function buildMedalEntries(ruleTypes: ScoringRuleTypeRow[], ruleMap: RuleMap) {
+  const entries: MedalEntry[] = [];
+
   const { data: finalMatch, error } = await supabase
     .from('matches')
     .select('*')
@@ -252,49 +264,86 @@ async function buildMedalEntries(ruleTypes: ScoringRuleTypeRow[], ruleMap: RuleM
     .maybeSingle();
 
   if (error) throw error;
-  if (!finalMatch || finalMatch.winner_team_id === null) return [];
 
   const goldId = getRuleTypeId(ruleTypes, 'gold_medal');
   const silverId = getRuleTypeId(ruleTypes, 'silver_medal');
-  if (!goldId || !silverId) return [];
 
-  const loserId =
-    finalMatch.winner_team_id === finalMatch.home_team_id
-      ? finalMatch.away_team_id
-      : finalMatch.home_team_id;
+  if (finalMatch && finalMatch.winner_team_id !== null && goldId && silverId) {
+    const loserId =
+      finalMatch.winner_team_id === finalMatch.home_team_id
+        ? finalMatch.away_team_id
+        : finalMatch.home_team_id;
 
-  const { data: teams, error: teamError } = await supabase
-    .from('teams')
+    const { data: teams, error: teamError } = await supabase
+      .from('teams')
+      .select('*')
+      .in('id', [finalMatch.winner_team_id, loserId]);
+
+    if (teamError) throw teamError;
+
+    const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamRow]));
+    const winner = teamMap.get(finalMatch.winner_team_id);
+    const loser = teamMap.get(loserId);
+
+    if (winner && loser) {
+      entries.push(
+        {
+          team_id: winner.id,
+          rule_type_id: goldId,
+          match_id: finalMatch.id,
+          source_key: `medal:gold:${winner.id}`,
+          points: getRulePoints(ruleMap, goldId, winner.tier_id),
+          description_tr: 'Altın Madalya - Şampiyon',
+          earned_at: finalMatch.scheduled_at,
+        },
+        {
+          team_id: loser.id,
+          rule_type_id: silverId,
+          match_id: finalMatch.id,
+          source_key: `medal:silver:${loser.id}`,
+          points: getRulePoints(ruleMap, silverId, loser.tier_id),
+          description_tr: 'Gümüş Madalya - İkinci',
+          earned_at: finalMatch.scheduled_at,
+        },
+      );
+    }
+  }
+
+  const { data: thirdPlaceMatch, error: thirdError } = await supabase
+    .from('matches')
     .select('*')
-    .in('id', [finalMatch.winner_team_id, loserId]);
+    .eq('stage', 'third_place')
+    .eq('status', 'finished')
+    .maybeSingle();
 
-  if (teamError) throw teamError;
+  if (thirdError) throw thirdError;
 
-  const teamMap = new Map((teams ?? []).map((t) => [t.id, t as TeamRow]));
-  const winner = teamMap.get(finalMatch.winner_team_id);
-  const loser = teamMap.get(loserId);
-  if (!winner || !loser) return [];
+  const bronzeId = getRuleTypeId(ruleTypes, 'bronze_medal');
 
-  return [
-    {
-      team_id: winner.id,
-      rule_type_id: goldId,
-      match_id: finalMatch.id,
-      source_key: `medal:gold:${winner.id}`,
-      points: getRulePoints(ruleMap, goldId, winner.tier_id),
-      description_tr: 'Altın Madalya - Şampiyon',
-      earned_at: finalMatch.scheduled_at,
-    },
-    {
-      team_id: loser.id,
-      rule_type_id: silverId,
-      match_id: finalMatch.id,
-      source_key: `medal:silver:${loser.id}`,
-      points: getRulePoints(ruleMap, silverId, loser.tier_id),
-      description_tr: 'Gümüş Madalya - İkinci',
-      earned_at: finalMatch.scheduled_at,
-    },
-  ];
+  if (thirdPlaceMatch && thirdPlaceMatch.winner_team_id !== null && bronzeId) {
+    const { data: bronzeTeam, error: bronzeTeamError } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', thirdPlaceMatch.winner_team_id)
+      .maybeSingle();
+
+    if (bronzeTeamError) throw bronzeTeamError;
+
+    if (bronzeTeam) {
+      const team = bronzeTeam as TeamRow;
+      entries.push({
+        team_id: team.id,
+        rule_type_id: bronzeId,
+        match_id: thirdPlaceMatch.id,
+        source_key: `medal:bronze:${team.id}`,
+        points: getRulePoints(ruleMap, bronzeId, team.tier_id),
+        description_tr: 'Bronz Madalya - Üçüncü',
+        earned_at: thirdPlaceMatch.scheduled_at,
+      });
+    }
+  }
+
+  return entries;
 }
 
 export async function recalculateAllPoints(): Promise<{ entriesCount: number }> {

@@ -159,6 +159,7 @@ Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya ad
 014_random_mode.sql
 015_random_mode_reroll_history.sql
 016_random_mode_no_same_group.sql
+017_seed_bronze_medal_scoring.sql
 ```
 
 > **Önemli:** Migration dosya adlarındaki zaman damgası gerçek oluşturma anını yansıtmalıdır. Yeni migration eklerken `.cursor/rules/supabase-migrations.mdc` kurallarına uyun.
@@ -236,6 +237,7 @@ yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 | 014 | `random_mode`              | Rastgele mod tabloları + RPC'ler + global ayar        |
 | 015 | `random_mode_reroll_history` | Reroll geçmişi (hangi takım yerine ne geldi)        |
 | 016 | `random_mode_no_same_group` | "Aynı gruptan takım gelmesin" koşulu + güncellenen RPC |
+| 017 | `seed_bronze_medal_scoring` | Bronz madalya puan kuralı (3.lük maçı kazananı)       |
 
 ---
 
@@ -325,6 +327,7 @@ Her takım bir **tier** (1–5) seviyesine sahiptir. Tier ne kadar yüksekse, o 
 | `round_advance`   | Atladığı eleme turu       | Eleme    |
 | `silver_medal`    | Final kaybedeni           | Madalya  |
 | `gold_medal`      | Şampiyon                  | Madalya  |
+| `bronze_medal`    | 3.lük maçı kazananı       | Madalya  |
 
 Puan değerleri admin panelinden tier bazında düzenlenebilir. Kurallar değiştirildiğinde **Puanları yeniden hesapla** butonu ile tüm puanlar güncellenir.
 
