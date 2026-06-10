@@ -42,6 +42,10 @@ export const config = {
   accessTokenTtl: '15m',
   refreshTokenRememberTtlDays: Number(process.env.REFRESH_TOKEN_REMEMBER_TTL_DAYS ?? 30),
   refreshTokenSessionTtlDays: Number(process.env.REFRESH_TOKEN_SESSION_TTL_DAYS ?? 1),
+  // Grace window during which a just-rotated refresh token is still accepted,
+  // so near-simultaneous refreshes (multiple tabs, a reload that aborts an
+  // in-flight refresh) don't race each other into a forced logout.
+  refreshRotationGraceSeconds: Number(process.env.REFRESH_ROTATION_GRACE_SECONDS ?? 60),
   // Refresh token is delivered only as an httpOnly cookie scoped to the auth routes.
   refreshCookieName: 'wc_refresh',
   refreshCookiePath: '/api/auth',

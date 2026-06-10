@@ -69,7 +69,13 @@ export async function createUser(input: {
 
 async function deleteExpiredRefreshTokens(): Promise<void> {
   // Opportunistic cleanup so expired rows don't accumulate forever.
-  await supabase.from('refresh_tokens').delete().lt('expires_at', new Date().toISOString());
+  const now = Date.now();
+  await supabase.from('refresh_tokens').delete().lt('expires_at', new Date(now).toISOString());
+  // Rows rotated longer ago than the grace window are no longer honored, so
+  // drop them too. (`< cutoff` is false for NULL rotated_at, leaving active
+  // tokens untouched.)
+  const graceCutoff = new Date(now - config.refreshRotationGraceSeconds * 1000).toISOString();
+  await supabase.from('refresh_tokens').delete().lt('rotated_at', graceCutoff);
 }
 
 export async function login(username: string, password: string, rememberMe = false) {
@@ -127,10 +133,28 @@ export async function refresh(oldRefreshToken: string) {
     .maybeSingle();
 
   if (error) throw error;
-  if (!stored || new Date(stored.expires_at) < new Date()) {
+
+  const now = Date.now();
+
+  if (!stored || new Date(stored.expires_at).getTime() < now) {
     // Drop the stale row if it lingered past expiry.
     if (stored) await supabase.from('refresh_tokens').delete().eq('id', stored.id);
     throw new Error('Oturum süresi doldu');
+  }
+
+  // Rotation grace: the same token can legitimately be presented by more than
+  // one near-simultaneous request (multiple tabs, or a reload that aborts an
+  // in-flight refresh before its Set-Cookie lands). The first caller rotates
+  // the token and stamps rotated_at; peers arriving within the grace window are
+  // still honored and each get their own fresh, valid token — so whichever
+  // cookie the browser ends up keeping is always valid. A token reused well
+  // after rotation signals a replay and is rejected.
+  if (stored.rotated_at) {
+    const rotatedAgoMs = now - new Date(stored.rotated_at).getTime();
+    if (rotatedAgoMs > config.refreshRotationGraceSeconds * 1000) {
+      await supabase.from('refresh_tokens').delete().eq('id', stored.id);
+      throw new Error('Oturum yenilenemedi');
+    }
   }
 
   const { data: user, error: userError } = await supabase
@@ -144,10 +168,11 @@ export async function refresh(oldRefreshToken: string) {
   const authUser = toAuthUser(user as UserRow);
 
   // Rotate the refresh token: issue a new one preserving the original absolute
-  // expiry, then invalidate the old one. A stolen-but-replayed token fails
-  // because its row no longer exists.
+  // expiry. The old token is marked rotated (kept for the grace window) rather
+  // than deleted, so concurrent peers above still pass; it stops working once
+  // the grace window lapses and cleanup removes it.
   const expiresAt = new Date(stored.expires_at);
-  const remainingSeconds = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+  const remainingSeconds = Math.max(1, Math.floor((expiresAt.getTime() - now) / 1000));
   const newTokenId = generateRefreshTokenId();
   const newRefreshToken = signRefreshToken(authUser.id, newTokenId, remainingSeconds);
 
@@ -160,7 +185,15 @@ export async function refresh(oldRefreshToken: string) {
 
   if (insertError) throw insertError;
 
-  await supabase.from('refresh_tokens').delete().eq('id', stored.id);
+  // Stamp rotated_at only on the first rotation (`.is('rotated_at', null)`), so
+  // the grace window is measured from the first use and can't be extended
+  // indefinitely by repeated replays.
+  await supabase
+    .from('refresh_tokens')
+    .update({ rotated_at: new Date(now).toISOString() })
+    .eq('id', stored.id)
+    .is('rotated_at', null);
+
   await deleteExpiredRefreshTokens();
 
   const accessToken = signAccessToken(authUser);
