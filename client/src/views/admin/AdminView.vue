@@ -13,6 +13,7 @@ import Tag from 'primevue/tag';
 import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
 import ConfirmDialog from 'primevue/confirmdialog';
+import TabBar from '@/components/TabBar.vue';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import api, { ADMIN_PATH } from '@/api/client';
@@ -1469,20 +1470,7 @@ function isSelf(userId: string) {
     <LoadingState v-if="loading" />
     <Card v-else>
       <template #content>
-        <nav class="admin-tabs" role="tablist" aria-label="Yönetim sekmeleri">
-          <button
-            v-for="tab in adminTabs"
-            :key="tab.key"
-            type="button"
-            role="tab"
-            class="admin-tab"
-            :class="{ 'is-active': activeTab === tab.key }"
-            :aria-selected="activeTab === tab.key"
-            @click="activeTab = tab.key"
-          >
-            {{ tab.label }}
-          </button>
-        </nav>
+        <TabBar v-model="activeTab" :tabs="adminTabs" aria-label="Yönetim sekmeleri" />
 
         <div v-show="activeTab === 'users'" class="admin-tab-panel" role="tabpanel">
             <DataTable :value="users" size="small" responsive-layout="scroll">
@@ -2405,48 +2393,6 @@ function isSelf(userId: string) {
 </template>
 
 <style scoped>
-.admin-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 1rem;
-}
-
-.admin-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.admin-tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  flex-shrink: 0;
-  white-space: nowrap;
-  padding: 0.75rem 1rem;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.admin-tab:hover {
-  color: var(--color-text);
-}
-
-.admin-tab.is-active {
-  color: var(--color-primary-hover);
-  border-bottom-color: var(--color-primary);
-}
-
 .admin-tab-panel {
   padding-top: 0.25rem;
 }
@@ -2754,11 +2700,6 @@ function isSelf(userId: string) {
 @media (max-width: 768px) {
   .groups-grid {
     grid-template-columns: 1fr;
-  }
-
-  .admin-tab {
-    padding: 0.65rem 0.75rem;
-    font-size: 0.85rem;
   }
 
   .toolbar :deep(.p-button) {

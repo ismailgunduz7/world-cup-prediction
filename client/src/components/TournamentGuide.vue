@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import Card from 'primevue/card';
 import Tag from 'primevue/tag';
+import TabBar from '@/components/TabBar.vue';
 import type { GuideGroup, GuideTier } from '@/types/dashboard';
 
 defineProps<{
@@ -51,20 +52,7 @@ onUnmounted(() => {
 <template>
   <Card class="guide-card">
     <template #content>
-      <nav class="guide-tabs" role="tablist" aria-label="Turnuva rehberi sekmeleri">
-        <button
-          v-for="tab in guideTabs"
-          :key="tab.key"
-          type="button"
-          role="tab"
-          class="guide-tab"
-          :class="{ 'is-active': activeGuideTab === tab.key }"
-          :aria-selected="activeGuideTab === tab.key"
-          @click="activeGuideTab = tab.key"
-        >
-          {{ tab.label }}
-        </button>
-      </nav>
+      <TabBar v-model="activeGuideTab" :tabs="guideTabs" aria-label="Turnuva rehberi sekmeleri" />
 
       <div v-show="activeGuideTab === 'tiers'" class="guide-tab-panel" role="tabpanel">
         <div class="tier-grid">
@@ -138,48 +126,6 @@ onUnmounted(() => {
 <style scoped>
 .guide-card :deep(.p-card-body) {
   padding-top: 0.85rem;
-}
-
-.guide-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 1rem;
-}
-
-.guide-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.guide-tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  flex-shrink: 0;
-  white-space: nowrap;
-  padding: 0.75rem 1rem;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.guide-tab:hover {
-  color: var(--color-text);
-}
-
-.guide-tab.is-active {
-  color: var(--color-primary-hover);
-  border-bottom-color: var(--color-primary);
 }
 
 .guide-tab-panel {
