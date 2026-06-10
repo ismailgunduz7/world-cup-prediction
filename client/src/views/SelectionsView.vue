@@ -54,12 +54,16 @@ onMounted(async () => {
   if (selectionsLocked.value || !userId) {
     selectedIds.value = [...savedSelectedIds.value];
     if (userId) clearSelectionDraft(userId);
+  } else if (savedSelectedIds.value.length > 0) {
+    // Kayıtlı seçimler her zaman eski taslağı geçersiz kılar.
+    selectedIds.value = [...savedSelectedIds.value];
+    clearSelectionDraft(userId);
   } else {
     const draft = loadSelectionDraft(userId);
     if (draft !== null) {
       selectedIds.value = draft.filter((id) => validTeamIds.has(id)).slice(0, maxSelections);
     } else {
-      selectedIds.value = [...savedSelectedIds.value];
+      selectedIds.value = [];
     }
   }
 
