@@ -39,7 +39,7 @@ type UserRow = {
 
 type TeamOption = { id: number; name_tr: string; group_code: string };
 
-type AdminTab = 'users' | 'rules' | 'settings' | 'matches' | 'groups';
+type AdminTab = 'users' | 'rules' | 'settings' | 'matches' | 'groups' | 'random';
 
 const adminTabs: Array<{ key: AdminTab; label: string }> = [
   { key: 'users', label: 'Kullanıcılar' },
@@ -47,6 +47,7 @@ const adminTabs: Array<{ key: AdminTab; label: string }> = [
   { key: 'settings', label: 'Ayarlar' },
   { key: 'matches', label: 'Maçlar' },
   { key: 'groups', label: 'Gruplar' },
+  { key: 'random', label: 'Rastgele' },
 ];
 
 const activeTab = ref<AdminTab>('users');
@@ -147,6 +148,40 @@ const editUser = ref({
 const editUserErrors = ref<ValidationErrors>({});
 
 const scoringFlags = ref({ group_stage_counts_as_round_advancement: false });
+
+const randomModeEnabled = ref(true);
+const savingRandomMode = ref(false);
+
+type RandomSelectionRow = {
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  condition: string;
+  allowedTiers: number[];
+  noSameGroup: boolean;
+  isTriggered: boolean;
+  rerollUsed: boolean;
+  updatedAt: string;
+  teams: Array<{ slot: number; team: { name_tr: string; group_code: string } | null }>;
+  reroll: { slot: number | null; fromTeam: string | null; toTeam: string | null } | null;
+};
+
+const randomSelections = ref<RandomSelectionRow[]>([]);
+const loadingRandomSelections = ref(false);
+
+const rerollDetailVisible = ref(false);
+const rerollDetail = ref<{
+  displayName: string;
+  slot: number | null;
+  fromTeam: string | null;
+  toTeam: string | null;
+} | null>(null);
+
+const randomConditionLabels: Record<string, string> = {
+  fully_random: 'Tamamen Rastgele',
+  exclude_own: 'Kendi Seçtikleri Dışında',
+  never_picked: 'Hiç Seçilmemişlerden',
+};
 
 type SelectionLockMode = 'before_first_match' | 'manual';
 
@@ -358,6 +393,8 @@ async function loadDashboard() {
 
   const flags = data.config.find((c: { key: string }) => c.key === 'scoring_flags');
   if (flags) scoringFlags.value = flags.value as typeof scoringFlags.value;
+  const randomCfg = data.config.find((c: { key: string }) => c.key === 'random_mode');
+  if (randomCfg) randomModeEnabled.value = (randomCfg.value as { enabled?: boolean }).enabled !== false;
   applySelectionLockConfig(data.config);
 
   const [{ data: matchData }, { data: teamData }] = await Promise.all([
@@ -686,6 +723,70 @@ async function saveScoringFlags() {
   await api.put(`/admin/${ADMIN_PATH}/config/scoring_flags`, { value: scoringFlags.value });
   toast.add({ severity: 'success', summary: 'Ayar kaydedildi', life: 3000 });
 }
+
+async function saveRandomModeFlag() {
+  savingRandomMode.value = true;
+  try {
+    await api.put(`/admin/${ADMIN_PATH}/config/random_mode`, {
+      value: { enabled: randomModeEnabled.value },
+    });
+    toast.add({ severity: 'success', summary: 'Ayar kaydedildi', life: 3000 });
+  } finally {
+    savingRandomMode.value = false;
+  }
+}
+
+async function loadRandomSelections() {
+  loadingRandomSelections.value = true;
+  try {
+    const { data } = await api.get(`/admin/${ADMIN_PATH}/random-selections`);
+    randomSelections.value = data.rows;
+  } finally {
+    loadingRandomSelections.value = false;
+  }
+}
+
+function resetRandomSelection(row: RandomSelectionRow) {
+  confirm.require({
+    header: 'Rastgele seçimi sıfırla',
+    message: `${row.displayName ?? row.username} kullanıcısının rastgele seçimi silinsin mi? Kullanıcı yeniden tetikleyebilir.`,
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Sıfırla',
+    rejectLabel: 'Vazgeç',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      await api.delete(`/admin/${ADMIN_PATH}/random-selections/${row.userId}`);
+      randomSelections.value = randomSelections.value.filter((r) => r.userId !== row.userId);
+      toast.add({ severity: 'success', summary: 'Sıfırlandı', life: 3000 });
+    },
+  });
+}
+
+function showRerollDetail(row: RandomSelectionRow) {
+  if (!row.reroll) return;
+  rerollDetail.value = {
+    displayName: row.displayName ?? row.username ?? 'Oyuncu',
+    slot: row.reroll.slot,
+    fromTeam: row.reroll.fromTeam,
+    toTeam: row.reroll.toTeam,
+  };
+  rerollDetailVisible.value = true;
+}
+
+function randomTeamsLabel(row: RandomSelectionRow) {
+  if (!row.teams.length) return '—';
+  return row.teams
+    .slice()
+    .sort((a, b) => a.slot - b.slot)
+    .map((t) => t.team?.name_tr ?? '—')
+    .join(', ');
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'random' && randomSelections.value.length === 0) {
+    loadRandomSelections();
+  }
+});
 
 async function saveSelectionLock() {
   savingSelectionLock.value = true;
@@ -1413,6 +1514,18 @@ function isSelf(userId: string) {
           </div>
           <Button label="Kaydet" icon="pi pi-check" @click="saveScoringFlags" />
         </section>
+
+        <section class="settings-section">
+          <h3 class="section-title">Rastgele mod</h3>
+          <Message severity="info" :closable="false">
+            Rastgele takım atama modunu site genelinde açıp kapatabilirsiniz. Kapalıyken oyuncular bu moda erişemez.
+          </Message>
+          <div class="settings-control">
+            <ToggleSwitch v-model="randomModeEnabled" input-id="random-mode-enabled" />
+            <label for="random-mode-enabled">Rastgele mod açık</label>
+          </div>
+          <Button label="Kaydet" icon="pi pi-check" :loading="savingRandomMode" @click="saveRandomModeFlag" />
+        </section>
         </div>
 
         <div v-show="activeTab === 'matches'" class="admin-tab-panel" role="tabpanel">
@@ -1796,6 +1909,97 @@ function isSelf(userId: string) {
             </template>
           </Card>
         </div>
+
+        <div v-show="activeTab === 'random'" class="admin-tab-panel" role="tabpanel">
+          <div class="random-toolbar">
+            <Message severity="info" :closable="false" class="random-info">
+              Oyuncuların rastgele modda yaptığı seçimler. Bir kullanıcının seçimini sıfırlarsanız
+              yeniden tetikleyebilir.
+            </Message>
+            <Button
+              label="Yenile"
+              icon="pi pi-refresh"
+              severity="secondary"
+              outlined
+              size="small"
+              :loading="loadingRandomSelections"
+              @click="loadRandomSelections"
+            />
+          </div>
+
+          <DataTable
+            :value="randomSelections"
+            :loading="loadingRandomSelections"
+            striped-rows
+            responsive-layout="scroll"
+            class="mt-3"
+          >
+            <Column header="Oyuncu">
+              <template #body="{ data }">
+                <span class="name-cell">{{ data.displayName ?? data.username }}</span>
+              </template>
+            </Column>
+            <Column header="Koşul">
+              <template #body="{ data }">
+                {{ randomConditionLabels[data.condition] ?? data.condition }}
+              </template>
+            </Column>
+            <Column header="Tier filtresi">
+              <template #body="{ data }">
+                <Tag
+                  v-for="t in data.allowedTiers"
+                  :key="t"
+                  :value="`T${t}`"
+                  severity="secondary"
+                  class="table-tag"
+                />
+              </template>
+            </Column>
+            <Column header="Aynı grup" style="width: 7rem">
+              <template #body="{ data }">
+                <Tag
+                  :value="data.noSameGroup ? 'Engelli' : 'Serbest'"
+                  :severity="data.noSameGroup ? 'warn' : 'secondary'"
+                  class="table-tag"
+                />
+              </template>
+            </Column>
+            <Column header="Takımlar">
+              <template #body="{ data }">{{ randomTeamsLabel(data) }}</template>
+            </Column>
+            <Column header="Durum" style="width: 9rem">
+              <template #body="{ data }">
+                <Tag
+                  :value="data.isTriggered ? 'Tetiklendi' : 'Bekliyor'"
+                  :severity="data.isTriggered ? 'success' : 'warn'"
+                  class="table-tag"
+                />
+                <Tag
+                  v-if="data.rerollUsed"
+                  value="Reroll"
+                  severity="info"
+                  class="table-tag reroll-tag"
+                  @click="showRerollDetail(data)"
+                />
+              </template>
+            </Column>
+            <Column header="" style="width: 7rem">
+              <template #body="{ data }">
+                <Button
+                  label="Sıfırla"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  text
+                  size="small"
+                  @click="resetRandomSelection(data)"
+                />
+              </template>
+            </Column>
+            <template #empty>
+              <span class="text-muted">Henüz rastgele seçim yapılmadı.</span>
+            </template>
+          </DataTable>
+        </div>
       </template>
     </Card>
 
@@ -1827,6 +2031,23 @@ function isSelf(userId: string) {
         <Button label="İptal" severity="secondary" text @click="editUserVisible = false" />
         <Button label="Kaydet" icon="pi pi-check" @click="saveEditUser" />
       </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="rerollDetailVisible"
+      header="Yeniden atma detayı"
+      modal
+      :style="{ width: 'min(26rem, 92vw)' }"
+    >
+      <div v-if="rerollDetail" class="reroll-detail">
+        <p class="reroll-detail-player">{{ rerollDetail.displayName }}</p>
+        <p class="reroll-detail-slot text-muted">{{ rerollDetail.slot }}. takım değiştirildi</p>
+        <div class="reroll-detail-swap">
+          <Tag :value="rerollDetail.fromTeam ?? '—'" severity="danger" />
+          <i class="pi pi-arrow-right" aria-hidden="true" />
+          <Tag :value="rerollDetail.toTeam ?? '—'" severity="success" />
+        </div>
+      </div>
     </Dialog>
 
     <Dialog v-model:visible="scoreDialogVisible" header="Skor Güncelle" modal :style="{ width: 'min(24rem, 92vw)' }">
@@ -1903,6 +2124,52 @@ function isSelf(userId: string) {
 
 .admin-tab-panel {
   padding-top: 0.25rem;
+}
+
+.random-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.random-info {
+  flex: 1 1 20rem;
+  margin: 0;
+}
+
+.reroll-tag {
+  cursor: pointer;
+}
+
+.reroll-tag:hover {
+  filter: brightness(0.95);
+}
+
+.reroll-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reroll-detail-player {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.reroll-detail-slot {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.reroll-detail-swap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .settings-panel {

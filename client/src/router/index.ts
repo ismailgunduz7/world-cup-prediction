@@ -42,6 +42,18 @@ const router = createRouter({
       meta: { requiresAuth: true, participantOnly: true },
     },
     {
+      path: '/rastgele',
+      name: 'random-mode',
+      component: () => import('@/views/RandomModeView.vue'),
+      meta: { requiresAuth: true, participantOnly: true },
+    },
+    {
+      path: '/rastgele/puan-durumu',
+      name: 'random-leaderboard',
+      component: () => import('@/views/RandomLeaderboardView.vue'),
+      meta: { requiresAuth: true, participantOnly: true },
+    },
+    {
       path: '/hesap',
       name: 'account',
       component: () => import('@/views/AccountView.vue'),

@@ -13,6 +13,7 @@
 - [Veritabanı Migrasyonları](#veritabanı-migrasyonları)
 - [Ana Sayfa (Katılımcı)](#ana-sayfa-katılımcı)
 - [Bracket Tahmini](#bracket-tahmini)
+- [Rastgele Mod](#rastgele-mod)
 - [Geliştirme](#geliştirme)
 - [Puanlama Sistemi](#puanlama-sistemi)
 - [Turnuva Akışı](#turnuva-akışı)
@@ -30,6 +31,7 @@
 - JWT tabanlı kimlik doğrulama (bellekte access token + httpOnly cookie’de refresh token, rotation, “beni hatırla” desteği)
 - **Faz-duyarlı ana sayfa** (turnuva durumuna göre rehber, kadro özeti veya kişisel panel)
 - **Bracket tahmin kum havuzu** (grup sıralaması + en iyi 8 üçüncü → eleme ağacı; kaydedilmez, puanları etkilemez)
+- **Rastgele mod** (gerçek seçimden bağımsız; koşul + tier filtresine göre animasyonlu 3 takım ataması, bir kez yeniden atma, kendi puan durumu sayfası)
 - 3 takım seçimi (kilit tarihinden önce)
 - Canlı puan durumu ve sıralama tablosu
 - Oyuncu detay sayfası (puan kırılımı)
@@ -154,6 +156,9 @@ Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya ad
 011_best_third_rankings.sql
 012_knockout_bracket_slots.sql
 013_set_team_selections_fn.sql
+014_random_mode.sql
+015_random_mode_reroll_history.sql
+016_random_mode_no_same_group.sql
 ```
 
 > **Önemli:** Migration dosya adlarındaki zaman damgası gerçek oluşturma anını yansıtmalıdır. Yeni migration eklerken `.cursor/rules/supabase-migrations.mdc` kurallarına uyun.
@@ -228,6 +233,9 @@ yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 | 011 | `best_third_rankings`      | En iyi 3. takımlar tablosu                            |
 | 012 | `knockout_bracket_slots`   | Eleme bracket slot kolonları                          |
 | 013 | `set_team_selections_fn`   | Atomik takım seçimi RPC (`set_team_selections`)       |
+| 014 | `random_mode`              | Rastgele mod tabloları + RPC'ler + global ayar        |
+| 015 | `random_mode_reroll_history` | Reroll geçmişi (hangi takım yerine ne geldi)        |
+| 016 | `random_mode_no_same_group` | "Aynı gruptan takım gelmesin" koşulu + güncellenen RPC |
 
 ---
 
@@ -259,6 +267,22 @@ Akış (3 adım):
 3. **Eleme ağacı** — Son 32’den finale kadar eşleşmeler oluşturulur; kullanıcı her maçta kazananı seçerek bir sonraki turu doldurur ve tahmini şampiyonu belirler.
 
 Son 32 eşleşmeleri ve üçüncülük slot atamaları (`3@…`) resmî FIFA 2026 kombinasyon tablosuna göre sunucuda çözülür (`POST /api/bracket/preview` — salt-okunur, stateless). Eşleşme şablonu ve 495 satırlık kombinasyon tablosu tek kaynak olarak sunucuda tutulur; kazanan ilerletme mantığı (`W{n}`/`L{n}` slotları) istemcide hesaplanır. Arayüz mobil uyumludur: masaüstünde turlar yatay sütunlar, mobilde dikey istiflenir.
+
+---
+
+## Rastgele Mod
+
+`/rastgele` sayfası, gerçek seçim yarışmasından **bağımsız** ikinci bir oyundur: oyuncuya, seçtiği koşula ve tier filtresine göre rastgele 3 takım atanır. Gerçek seçim akışı (`/secimlerim`) hiç değişmez; puanlama her iki modda da aynı `team_total_points` üzerinden işler. Rastgele mod, admin tarafından site genelinde açılıp kapatılabilir (`tournament_config.random_mode`).
+
+**Koşullar** (hepsi tier filtresiyle kesişir):
+
+- **Tamamen Rastgele** — 48 ülkenin tamamı uygun.
+- **Kendi Seçtikleri Dışında** — oyuncunun gerçek modda seçtiği 3 takım hariç 45 ülke.
+- **Hiç Seçilmemişlerden** — hiçbir oyuncunun gerçek modda seçmediği takımlar (randomlar değil, gerçek seçimler baz alınır).
+
+Ek olarak **"Aynı gruptan takım gelmesin"** koşulu işaretlenebilir; bu durumda atanan 3 takımın her biri farklı bir Dünya Kupası grubundan seçilir (yeniden atmada da değişmeyen iki takımın grupları dışlanır). Bu koşul yeterli sayıda farklı grup yoksa anlamlı bir hata döndürür.
+
+**Akış:** Oyuncu koşul + (opsiyonel) aynı-grup kuralı + tier filtresini belirler ve "Rastgele Seç"e basar. Havuz ve rastgele seçim **sunucuda** (yetkili) yapılır; istemci sonucu slot-makinesi animasyonuyla 1→2→3 sırayla açar. Tetikleme sonrası koşul ve tier filtresi **kilitlenir**. Oyuncu, takımlardan **yalnızca birini** aynı filtrelerle **bir kez** yeniden atabilir (reroll). Tüm tercihler ve atanan takımlar veritabanına yazılır (`random_mode_entries`, `random_mode_teams`). Tetikleme/yeniden atma gerçek seçimle aynı kilide tabidir (`areSelectionsLocked()`). Modun kendi puan durumu sayfası vardır (`/rastgele/puan-durumu`).
 
 ---
 
@@ -370,8 +394,9 @@ Admin paneline `/{ADMIN_PATH}` adresinden erişilir. Yönetici hesabıyla giriş
 | Gruplar      | Puan tabloları, finalize, manuel sıralama  |
 | En İyi 3.ler | 12→8 sıralaması                            |
 | Kurallar     | Puan kuralı ve tier tabloları              |
-| Ayarlar      | Turnuva config (kilit tarihi vb.)          |
+| Ayarlar      | Turnuva config (kilit tarihi, rastgele mod aç/kapa vb.) |
 | Kullanıcılar | Kullanıcı CRUD                             |
+| Rastgele     | Oyuncuların rastgele seçimleri + kullanıcı bazında sıfırlama |
 
 ---
 
@@ -463,12 +488,18 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | GET     | `/groups/best-thirds` | En iyi 3.ler sıralaması                               |
 | POST    | `/bracket/preview`    | Bracket tahmin önizlemesi (stateless, salt-okunur)    |
 | GET     | `/scoring-rules`      | Aktif puan kuralları                                  |
+| GET     | `/random-mode/mine`   | Rastgele mod durumu + atanan takımlar                 |
+| POST    | `/random-mode/trigger`| Rastgele 3 takım ata (koşul + tier; config'i kilitler)|
+| POST    | `/random-mode/reroll` | Tek bir takımı yeniden ata (bir kez)                  |
+| GET     | `/random-mode/leaderboard` | Rastgele mod sıralaması                           |
 
 ### Admin (seçilmiş)
 
 | Method | Endpoint                       | Açıklama                                  |
 | ------ | ------------------------------ | ----------------------------------------- |
 | PUT    | `/matches/:id/result`          | Maç skoru kaydet                          |
+| GET    | `/random-selections`           | Oyuncuların rastgele seçimleri            |
+| DELETE | `/random-selections/:userId`   | Bir oyuncunun rastgele seçimini sıfırla   |
 | POST   | `/groups/:code/finalize`       | Grubu finalize et                         |
 | PUT    | `/groups/:code/rankings`       | Manuel grup sıralaması                    |
 | GET    | `/groups/best-thirds`          | En iyi 3.ler durumu                       |

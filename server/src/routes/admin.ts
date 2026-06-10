@@ -224,6 +224,14 @@ adminRoutes.put('/config/:key', async (c) => {
     return c.json({ success: true });
   }
 
+  if (key === 'random_mode') {
+    const schema = z.object({ enabled: z.boolean() });
+    const parsed = schema.safeParse(body.value);
+    if (!parsed.success) return c.json({ error: 'Geçersiz rastgele mod ayarı' }, 400);
+    await setConfigValue(key, parsed.data);
+    return c.json({ success: true });
+  }
+
   await setConfigValue(key, body.value);
 
   if (key === 'scoring_flags') {
@@ -585,6 +593,67 @@ adminRoutes.post('/advancements', async (c) => {
   if (error) throw error;
   const result = await recalculateAllPoints();
   return c.json({ success: true, recalculated: result });
+});
+
+// Random mode oversight: list every player's random entry + assigned teams,
+// and allow resetting a single player's random selection.
+adminRoutes.get('/random-selections', async (c) => {
+  const [{ data: entries, error: entryError }, { data: slots, error: slotError }] = await Promise.all([
+    supabase
+      .from('random_mode_entries')
+      .select(
+        'user_id, condition, allowed_tiers, no_same_group, is_triggered, reroll_used, reroll_slot, updated_at, user:users(username, display_name), reroll_from:teams!reroll_from_team_id(name_tr), reroll_to:teams!reroll_to_team_id(name_tr)',
+      )
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('random_mode_teams')
+      .select('user_id, slot, team:teams(id, name_tr, group_code, tier:tiers(name_tr))')
+      .order('slot'),
+  ]);
+
+  if (entryError) throw entryError;
+  if (slotError) throw slotError;
+
+  const teamsByUser = new Map<string, unknown[]>();
+  for (const row of slots ?? []) {
+    const list = teamsByUser.get(row.user_id) ?? [];
+    list.push({ slot: row.slot, team: row.team });
+    teamsByUser.set(row.user_id, list);
+  }
+
+  const rows = (entries ?? []).map((e) => ({
+    userId: e.user_id,
+    username: (e.user as { username?: string } | null)?.username ?? null,
+    displayName: (e.user as { display_name?: string } | null)?.display_name ?? null,
+    condition: e.condition,
+    allowedTiers: e.allowed_tiers,
+    noSameGroup: e.no_same_group,
+    isTriggered: e.is_triggered,
+    rerollUsed: e.reroll_used,
+    updatedAt: e.updated_at,
+    teams: teamsByUser.get(e.user_id) ?? [],
+    reroll: e.reroll_used
+      ? {
+          slot: e.reroll_slot,
+          fromTeam: (e.reroll_from as { name_tr?: string } | null)?.name_tr ?? null,
+          toTeam: (e.reroll_to as { name_tr?: string } | null)?.name_tr ?? null,
+        }
+      : null,
+  }));
+
+  return c.json({ rows });
+});
+
+adminRoutes.delete('/random-selections/:userId', async (c) => {
+  const userId = c.req.param('userId');
+
+  const { error: teamError } = await supabase.from('random_mode_teams').delete().eq('user_id', userId);
+  if (teamError) throw teamError;
+
+  const { error: entryError } = await supabase.from('random_mode_entries').delete().eq('user_id', userId);
+  if (entryError) throw entryError;
+
+  return c.json({ success: true });
 });
 
 export default adminRoutes;

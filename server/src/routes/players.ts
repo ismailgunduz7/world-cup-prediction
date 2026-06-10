@@ -8,6 +8,7 @@ playerRoutes.use('*', authMiddleware, participantMiddleware);
 
 playerRoutes.get('/:userId/points', async (c) => {
   const userId = c.req.param('userId');
+  const mode = c.req.query('mode') === 'random' ? 'random' : 'real';
 
   const { data: player, error: playerError } = await supabase
     .from('users')
@@ -21,11 +22,20 @@ playerRoutes.get('/:userId/points', async (c) => {
     return c.json({ error: 'Oyuncu bulunamadı' }, 404);
   }
 
-  const { data: selections, error: selError } = await supabase
-    .from('team_selections')
-    .select('*, team:teams(*, tier:tiers(*))')
-    .eq('user_id', userId)
-    .order('selected_at');
+  // Both modes reuse the same point-breakdown logic; only the source of the
+  // player's teams differs (real picks vs. randomly-assigned teams).
+  const { data: selections, error: selError } =
+    mode === 'random'
+      ? await supabase
+          .from('random_mode_teams')
+          .select('team_id, selected_at, team:teams(*, tier:tiers(*))')
+          .eq('user_id', userId)
+          .order('slot')
+      : await supabase
+          .from('team_selections')
+          .select('*, team:teams(*, tier:tiers(*))')
+          .eq('user_id', userId)
+          .order('selected_at');
 
   if (selError) throw selError;
 

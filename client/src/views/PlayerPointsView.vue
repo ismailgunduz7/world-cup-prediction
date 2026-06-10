@@ -56,8 +56,11 @@ const hasSelections = ref(false);
 const teams = ref<TeamSection[]>([]);
 const openPanels = ref<string[]>([]);
 
+const isRandomMode = route.query.mode === 'random';
+
 const backRoutes: Record<string, string> = {
   leaderboard: '/puan-durumu',
+  'random-leaderboard': '/rastgele/puan-durumu',
 };
 
 const stageLabels: Record<string, string> = {
@@ -72,7 +75,9 @@ const stageLabels: Record<string, string> = {
 
 onMounted(async () => {
   try {
-    const { data } = await api.get(`/players/${route.params.id}/points`);
+    const { data } = await api.get(`/players/${route.params.id}/points`, {
+      params: isRandomMode ? { mode: 'random' } : {},
+    });
     player.value = data.player;
     hasSelections.value = data.hasSelections;
     teams.value = data.teams;
@@ -125,7 +130,7 @@ function goToTeam(teamId: number) {
   router.push({
     name: 'team-matches',
     params: { id: teamId },
-    query: { from: 'leaderboard' },
+    query: { from: isRandomMode ? 'random-leaderboard' : 'leaderboard' },
   });
 }
 </script>
@@ -143,7 +148,10 @@ function goToTeam(teamId: number) {
       <Button icon="pi pi-arrow-left" label="Geri" severity="secondary" text @click="goBack" />
     </div>
 
-    <PageHeader :title="player.displayName" subtitle="Seçilen takımların puan detayları" />
+    <PageHeader
+      :title="player.displayName"
+      :subtitle="isRandomMode ? 'Rastgele atanan takımların puan detayları' : 'Seçilen takımların puan detayları'"
+    />
 
     <Card>
       <template #content>
@@ -154,7 +162,7 @@ function goToTeam(teamId: number) {
     </Card>
 
     <Message v-if="!hasSelections" severity="info" :closable="false">
-      Bu oyuncu henüz takım seçimi yapmamış.
+      {{ isRandomMode ? 'Bu oyuncu henüz rastgele atama yapmamış.' : 'Bu oyuncu henüz takım seçimi yapmamış.' }}
     </Message>
 
     <section v-for="section in teams" :key="section.team.id" class="team-section">

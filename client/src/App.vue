@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Button from 'primevue/button';
 import Toast from 'primevue/toast';
 import { useAuthStore } from '@/stores/auth';
-import { ADMIN_PATH } from '@/api/client';
+import api, { ADMIN_PATH } from '@/api/client';
 
 const MOBILE_NAV_BREAKPOINT = '(max-width: 768px)';
 
@@ -23,11 +23,32 @@ function syncMobileNavLayout() {
   }
 }
 
+const randomModeEnabled = ref(false);
+
+async function refreshRandomModeFlag() {
+  if (!auth.isAuthenticated || auth.user?.isAdmin) {
+    randomModeEnabled.value = false;
+    return;
+  }
+  try {
+    const { data } = await api.get('/tournament/status');
+    randomModeEnabled.value = data.randomModeEnabled !== false;
+  } catch {
+    randomModeEnabled.value = false;
+  }
+}
+
 onMounted(() => {
   syncMobileNavLayout();
   mobileNavMediaQuery = window.matchMedia(MOBILE_NAV_BREAKPOINT);
   mobileNavMediaQuery.addEventListener('change', syncMobileNavLayout);
+  refreshRandomModeFlag();
 });
+
+watch(
+  () => auth.isAuthenticated,
+  () => refreshRandomModeFlag(),
+);
 
 onUnmounted(() => {
   mobileNavMediaQuery?.removeEventListener('change', syncMobileNavLayout);
@@ -44,18 +65,21 @@ const showAdminBar = computed(
   () => isAdmin.value && (route.name === 'admin' || route.name === 'account'),
 );
 
-const navItems = [
+const navItems = computed(() => [
   { to: '/', label: 'Ana Sayfa', icon: 'pi pi-home' },
   { to: '/secimlerim', label: 'Seçimlerim', icon: 'pi pi-check-square' },
   { to: '/puan-durumu', label: 'Puan Durumu', icon: 'pi pi-chart-bar' },
   { to: '/bracket', label: 'Bracket', icon: 'pi pi-sitemap' },
+  ...(randomModeEnabled.value
+    ? [{ to: '/rastgele', label: 'Rastgele Mod', icon: 'pi pi-bolt' }]
+    : []),
   { to: '/kurallar', label: 'Kurallar', icon: 'pi pi-list' },
-];
+]);
 
-const mobileNavItems = [
-  ...navItems,
+const mobileNavItems = computed(() => [
+  ...navItems.value,
   { to: '/hesap', label: 'Hesabım', icon: 'pi pi-user' },
-];
+]);
 
 function closeMobileNav() {
   mobileNavOpen.value = false;
