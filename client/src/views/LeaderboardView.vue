@@ -8,6 +8,9 @@ import Tag from 'primevue/tag';
 import { useToast } from 'primevue/usetoast';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
+import PlayerLeaderboardTable from '@/components/PlayerLeaderboardTable.vue';
+import TabBar from '@/components/TabBar.vue';
+import { rankLabel, type PlayerLeaderboardEntry } from '@/utils/leaderboard';
 import api from '@/api/client';
 
 type LeaderboardTab = 'players' | 'teams' | 'groups';
@@ -63,16 +66,6 @@ const tabs: { key: LeaderboardTab; label: string }[] = [
   { key: 'groups', label: 'Grup Puanları' },
 ];
 
-type PlayerEntry = {
-  rank: number;
-  username: string;
-  displayName: string;
-  totalScore: number;
-  isCurrentUser: boolean;
-  hasSelections: boolean;
-  selections: Array<{ name: string; points: number }>;
-};
-
 type TeamEntry = {
   rank: number;
   teamId: number;
@@ -87,7 +80,7 @@ const toast = useToast();
 const router = useRouter();
 const loading = ref(true);
 const activeTab = ref<LeaderboardTab>('players');
-const entries = ref<PlayerEntry[]>([]);
+const entries = ref<PlayerLeaderboardEntry[]>([]);
 const teamStandings = ref<TeamEntry[]>([]);
 const groupStandings = ref<GroupStandings[]>([]);
 const bestThirds = ref<BestThirdSummary | null>(null);
@@ -104,17 +97,6 @@ onMounted(async () => {
   bestThirds.value = bestThirdData.bestThirds;
   loading.value = false;
 });
-
-function formatSelections(entry: PlayerEntry) {
-  if (!entry.hasSelections) return 'Seçim yapılmadı';
-  return entry.selections
-    .map((s) => `${s.name} (${s.points}p)`)
-    .join(', ');
-}
-
-function playerRowClass(data: PlayerEntry) {
-  return data.isCurrentUser ? 'row-highlight' : '';
-}
 
 function teamRowClass(data: TeamEntry) {
   return data.isUserSelection ? 'row-highlight' : '';
@@ -149,13 +131,6 @@ function onGroupTeamClick(teamId: number) {
   });
 }
 
-function rankLabel(rank: number) {
-  if (rank === 1) return '🥇';
-  if (rank === 2) return '🥈';
-  if (rank === 3) return '🥉';
-  return rank;
-}
-
 function onTeamRowClick(event: { data: TeamEntry }) {
   router.push({
     name: 'team-matches',
@@ -164,8 +139,7 @@ function onTeamRowClick(event: { data: TeamEntry }) {
   });
 }
 
-function onPlayerRowClick(event: { data: PlayerEntry }) {
-  const entry = event.data;
+function onPlayerSelect(entry: PlayerLeaderboardEntry) {
   if (!entry.hasSelections) {
     toast.add({
       severity: 'info',
@@ -191,61 +165,10 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 
     <Card class="leaderboard-card">
       <template #content>
-        <nav class="leaderboard-tabs" role="tablist" aria-label="Puan durumu sekmeleri">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            role="tab"
-            class="leaderboard-tab"
-            :class="{ 'is-active': activeTab === tab.key }"
-            :aria-selected="activeTab === tab.key"
-            @click="activeTab = tab.key"
-          >
-            {{ tab.label }}
-          </button>
-        </nav>
+        <TabBar v-model="activeTab" :tabs="tabs" aria-label="Puan durumu sekmeleri" />
 
         <div v-show="activeTab === 'players'" class="leaderboard-tab-panel" role="tabpanel">
-          <DataTable
-            :value="entries"
-            striped-rows
-            :row-class="playerRowClass"
-            responsive-layout="scroll"
-            class="players-table"
-            @row-click="onPlayerRowClick"
-          >
-            <Column header="#" style="width: 4rem">
-              <template #body="{ data }">
-                <span class="rank-cell">{{ rankLabel(data.rank) }}</span>
-              </template>
-            </Column>
-            <Column header="Oyuncu" body-class="player-name-col" style="min-width: 7rem">
-              <template #body="{ data }">
-                <span class="name-cell">{{ data.displayName }}</span>
-              </template>
-            </Column>
-            <Column field="totalScore" header="Toplam Puan" style="width: 8rem; min-width: 8rem">
-              <template #body="{ data }">
-                <strong>{{ data.totalScore }}</strong>
-              </template>
-            </Column>
-            <Column
-              header="Seçilen Takımlar"
-              header-class="selections-col"
-              body-class="selections-col"
-              style="min-width: 16rem"
-            >
-              <template #body="{ data }">
-                <span :class="{ 'text-muted': !data.hasSelections }">
-                  {{ formatSelections(data) }}
-                </span>
-              </template>
-            </Column>
-            <template #empty>
-              <span class="text-muted">Henüz bir yarışmaya atanmadınız. Yöneticiyle iletişime geçin.</span>
-            </template>
-          </DataTable>
+          <PlayerLeaderboardTable :entries="entries" @select="onPlayerSelect" />
         </div>
 
         <div v-show="activeTab === 'teams'" class="leaderboard-tab-panel" role="tabpanel">
@@ -380,48 +303,6 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
   padding-top: 0.85rem;
 }
 
-.leaderboard-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 1rem;
-}
-
-.leaderboard-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.leaderboard-tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  flex-shrink: 0;
-  white-space: nowrap;
-  padding: 0.75rem 1rem;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.leaderboard-tab:hover {
-  color: var(--color-text);
-}
-
-.leaderboard-tab.is-active {
-  color: var(--color-primary-hover);
-  border-bottom-color: var(--color-primary);
-}
-
 .leaderboard-tab-panel {
   padding-top: 0.25rem;
 }
@@ -449,13 +330,7 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
   white-space: nowrap;
 }
 
-.leaderboard-card :deep(.player-name-col),
-.leaderboard-card :deep(.selections-col) {
-  white-space: nowrap;
-}
-
 .teams-table :deep(.p-datatable-tbody > tr),
-.players-table :deep(.p-datatable-tbody > tr),
 .group-standings-card :deep(.p-datatable-tbody > tr) {
   cursor: pointer;
 }
