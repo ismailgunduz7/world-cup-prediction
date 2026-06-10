@@ -326,9 +326,15 @@ randomModeRoutes.get('/leaderboard', async (c) => {
     .order('display_name');
   if (userError) throw userError;
 
+  const userIds = (users ?? []).map((u) => u.id);
+  if (userIds.length === 0) {
+    return c.json({ entries: [] });
+  }
+
   const { data: slots, error: slotError } = await supabase
     .from('random_mode_teams')
     .select('user_id, slot, team:teams(id, name_tr)')
+    .in('user_id', userIds)
     .order('slot');
   if (slotError) throw slotError;
 

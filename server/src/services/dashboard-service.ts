@@ -70,19 +70,24 @@ async function buildLeaderboardEntries(competitionId: string | null) {
   // ranked players (empty leaderboard).
   if (!competitionId) return [];
 
-  const [{ data: users, error: userError }, { data: selections, error: selError }, { data: totals, error: totalError }] =
-    await Promise.all([
-      supabase
-        .from('users')
-        .select('id, display_name')
-        .eq('is_admin', false)
-        .eq('competition_id', competitionId)
-        .order('display_name'),
-      supabase.from('team_selections').select('user_id, team_id'),
-      supabase.from('team_total_points').select('*'),
-    ]);
-
+  const { data: users, error: userError } = await supabase
+    .from('users')
+    .select('id, display_name')
+    .eq('is_admin', false)
+    .eq('competition_id', competitionId)
+    .order('display_name');
   if (userError) throw userError;
+
+  const userIds = (users ?? []).map((u) => u.id);
+  if (userIds.length === 0) return [];
+
+  // Selections are scoped to this competition's members so other competitions'
+  // picks never enter the score computation.
+  const [{ data: selections, error: selError }, { data: totals, error: totalError }] = await Promise.all([
+    supabase.from('team_selections').select('user_id, team_id').in('user_id', userIds),
+    supabase.from('team_total_points').select('*'),
+  ]);
+
   if (selError) throw selError;
   if (totalError) throw totalError;
 
