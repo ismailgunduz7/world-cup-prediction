@@ -6,7 +6,7 @@ import Column from 'primevue/column';
 import Message from 'primevue/message';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
-import api from '@/api/client';
+import { useReferenceStore } from '@/stores/reference';
 
 type RuleRow = {
   id: number;
@@ -35,12 +35,14 @@ type MatrixRow = {
   pointsByTier: Record<number, number>;
 };
 
+const reference = useReferenceStore();
+
 const loading = ref(true);
 const rules = ref<RuleRow[]>([]);
 const scoringFlags = ref({ group_stage_counts_as_round_advancement: false });
 
 onMounted(async () => {
-  const { data } = await api.get('/scoring-rules');
+  const data = await reference.ensureScoringRules();
   rules.value = data.rules;
   scoringFlags.value = data.scoringFlags;
   loading.value = false;

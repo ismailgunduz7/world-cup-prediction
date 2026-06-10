@@ -11,6 +11,7 @@ import { useToast } from 'primevue/usetoast';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import api from '@/api/client';
+import { useReferenceStore } from '@/stores/reference';
 
 type Tier = { id: number; name: string };
 type Team = {
@@ -44,6 +45,7 @@ const CONDITIONS: Array<{ value: RandomCondition; label: string; description: st
 
 const toast = useToast();
 const router = useRouter();
+const reference = useReferenceStore();
 
 const loading = ref(true);
 const enabled = ref(true);
@@ -75,9 +77,9 @@ const configLocked = computed(() => isTriggered.value);
 const busy = computed(() => triggering.value || rerollingSlot.value !== null);
 
 onMounted(async () => {
-  const [mineRes, teamsRes] = await Promise.all([
+  const [mineRes, teamsData] = await Promise.all([
     api.get('/random-mode/mine'),
-    api.get('/teams'),
+    reference.ensureTeams(),
   ]);
 
   const mine = mineRes.data;
@@ -93,11 +95,9 @@ onMounted(async () => {
     if (s.team) display.value[s.slot] = s.team.name;
   }
 
-  tiers.value = teamsRes.data.tiers ?? [];
-  groups.value = teamsRes.data.groups ?? [];
-  allTeamNames.value = ((teamsRes.data.groups ?? []) as Group[])
-    .flatMap((g) => g.teams)
-    .map((t) => t.name);
+  tiers.value = teamsData.tiers;
+  groups.value = teamsData.groups;
+  allTeamNames.value = teamsData.groups.flatMap((g) => g.teams).map((t) => t.name);
 
   loading.value = false;
   document.addEventListener('click', closeGroupPopover);

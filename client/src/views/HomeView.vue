@@ -17,11 +17,13 @@ import MiniLeaderboard from '@/components/dashboard/MiniLeaderboard.vue';
 import RecentActivity from '@/components/dashboard/RecentActivity.vue';
 import GroupProgress from '@/components/dashboard/GroupProgress.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useReferenceStore } from '@/stores/reference';
 import api from '@/api/client';
 import { loadSelectionDraft } from '@/utils/selection-draft';
 import type { DashboardData, GuideGroup, GuideTier } from '@/types/dashboard';
 
 const auth = useAuthStore();
+const reference = useReferenceStore();
 
 const loading = ref(true);
 const dashboard = ref<DashboardData | null>(null);
@@ -62,9 +64,9 @@ async function loadHome() {
   dashboard.value = dashboardRes.data;
 
   if (!dashboardRes.data.status.tournamentStarted) {
-    const teamsRes = await api.get('/teams');
-    tiers.value = teamsRes.data.tiers;
-    groups.value = teamsRes.data.groups;
+    const teamsData = await reference.ensureTeams();
+    tiers.value = teamsData.tiers;
+    groups.value = teamsData.groups;
   }
 
   loading.value = false;

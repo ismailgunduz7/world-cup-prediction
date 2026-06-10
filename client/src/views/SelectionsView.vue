@@ -11,6 +11,7 @@ import { useToast } from 'primevue/usetoast';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useReferenceStore } from '@/stores/reference';
 import api from '@/api/client';
 import {
   clearSelectionDraft,
@@ -30,6 +31,7 @@ type Group = { code: string; teams: Team[] };
 const toast = useToast();
 const router = useRouter();
 const auth = useAuthStore();
+const reference = useReferenceStore();
 
 const loading = ref(true);
 const saving = ref(false);
@@ -41,8 +43,11 @@ const selectionsLocked = ref(false);
 const maxSelections = 3;
 
 onMounted(async () => {
-  const [teamsRes, selRes] = await Promise.all([api.get('/teams'), api.get('/selections/mine')]);
-  allTeams.value = (teamsRes.data.groups as Group[])
+  const [teamsData, selRes] = await Promise.all([
+    reference.ensureTeams(),
+    api.get('/selections/mine'),
+  ]);
+  allTeams.value = (teamsData.groups as unknown as Group[])
     .flatMap((g) => g.teams)
     .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   savedSelectedIds.value = selRes.data.teamIds;

@@ -10,6 +10,7 @@ import BracketTree from '@/components/bracket/BracketTree.vue';
 import BracketExportPoster from '@/components/bracket/BracketExportPoster.vue';
 import api from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
+import { useReferenceStore } from '@/stores/reference';
 import { downloadBracketImage, openBracketPreviewWindow, previewBracketImage } from '@/utils/export-bracket-image';
 import type { PosterGroup, PosterThirdPick } from '@/types/bracket-export';
 import type { BracketPreview, BracketTeam, ResolvedMatch } from '@/types/bracket';
@@ -37,12 +38,14 @@ const exportPosterRef = ref<HTMLElement | null>(null);
 const stale = ref(false);
 const error = ref<string | null>(null);
 
+const reference = useReferenceStore();
+
 onMounted(async () => {
   try {
-    const { data } = await api.get('/teams');
-    groups.value = data.groups;
+    const { groups: teamGroups } = await reference.ensureTeams();
+    groups.value = teamGroups as Group[];
     const initial: Record<string, number[]> = {};
-    for (const group of data.groups as Group[]) {
+    for (const group of teamGroups) {
       initial[group.code] = group.teams.map((t) => t.id);
     }
     rankings.value = initial;

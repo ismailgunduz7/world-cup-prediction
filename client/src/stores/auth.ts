@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import api, { clearAccessToken, setAccessToken } from '@/api/client';
+import { useReferenceStore } from '@/stores/reference';
 import { clearRememberLogin, saveRememberLogin } from '@/utils/remember-login';
 import { clearSelectionDraft } from '@/utils/selection-draft';
 
@@ -59,6 +60,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (userId) clearSelectionDraft(userId);
       clearAccessToken();
       user.value = null;
+      // Sonraki kullanıcı önceki oturumun cache'ini görmesin.
+      useReferenceStore().reset();
     }
   }
 
