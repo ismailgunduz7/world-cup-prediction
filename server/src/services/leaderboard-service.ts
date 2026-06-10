@@ -1,4 +1,5 @@
 import { supabase } from '../lib/config.js';
+import { unwrapOne } from '../lib/serializers.js';
 
 export type PlayerLeaderboardEntry = {
   rank: number;
@@ -24,10 +25,16 @@ type SelectionRow = {
  *
  * `currentUserId` is flagged via `isCurrentUser`; pass null for the admin view
  * (no row is the "current" player).
+ *
+ * `pointsMap` (team id → total points) can be supplied by callers that already
+ * loaded `team_total_points` (e.g. `/api/leaderboard`, which also needs it for
+ * team standings) to avoid fetching the same table twice; omitted, it is loaded
+ * here.
  */
 export async function buildPlayerLeaderboard(
   competitionId: string | null,
   currentUserId: string | null,
+  pointsMap?: Map<number, number>,
 ): Promise<PlayerLeaderboardEntry[]> {
   if (!competitionId) return [];
 
@@ -51,10 +58,7 @@ export async function buildPlayerLeaderboard(
 
   if (selError) throw selError;
 
-  const { data: totals, error: totalError } = await supabase.from('team_total_points').select('*');
-  if (totalError) throw totalError;
-
-  const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
+  const points = pointsMap ?? (await loadTeamPointsMap());
 
   const byUser = new Map<string, SelectionRow[]>();
   for (const sel of (selections ?? []) as SelectionRow[]) {
@@ -65,7 +69,7 @@ export async function buildPlayerLeaderboard(
 
   const entries = (users ?? []).map((u) => {
     const userSelections = byUser.get(u.id) ?? [];
-    const totalScore = userSelections.reduce((sum, s) => sum + (pointsMap.get(s.team_id) ?? 0), 0);
+    const totalScore = userSelections.reduce((sum, s) => sum + (points.get(s.team_id) ?? 0), 0);
 
     return {
       username: u.username,
@@ -74,8 +78,8 @@ export async function buildPlayerLeaderboard(
       totalScore,
       hasSelections: userSelections.length > 0,
       selections: userSelections.map((s) => {
-        const team = Array.isArray(s.team) ? s.team[0] ?? null : s.team;
-        return { name: team?.name_tr ?? '—', points: pointsMap.get(s.team_id) ?? 0 };
+        const team = unwrapOne(s.team);
+        return { name: team?.name_tr ?? '—', points: points.get(s.team_id) ?? 0 };
       }),
     };
   });
@@ -83,4 +87,11 @@ export async function buildPlayerLeaderboard(
   entries.sort((a, b) => b.totalScore - a.totalScore);
 
   return entries.map((e, index) => ({ ...e, rank: index + 1 }));
+}
+
+/** Loads the team id → total points map from the `team_total_points` view. */
+export async function loadTeamPointsMap(): Promise<Map<number, number>> {
+  const { data: totals, error } = await supabase.from('team_total_points').select('*');
+  if (error) throw error;
+  return new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
 }

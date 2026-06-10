@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
-import { toMatchSummary, toPointEntry } from '../lib/serializers.js';
+import { toMatchSummary, toPointEntry, unwrapOne } from '../lib/serializers.js';
 
 const playerRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -77,27 +77,42 @@ playerRoutes.get('/:username/points', async (c) => {
     entriesByTeam.set(entry.team_id, list);
   }
 
-  const teams = await Promise.all(
-    (selections ?? []).map(async (selection) => {
-      const raw = (Array.isArray(selection.team) ? selection.team[0] : selection.team) as {
+  // Fetch every finished match for all of the player's teams in one query
+  // (instead of one query per team), then group by team. A match between two of
+  // the player's own teams is attributed to both.
+  const { data: allMatches, error: matchError } = await supabase
+    .from('matches')
+    .select(
+      'id, stage, status, scheduled_at, home_score, away_score, home_team_id, away_team_id, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
+    )
+    .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
+    .eq('status', 'finished')
+    .order('scheduled_at');
+
+  if (matchError) throw matchError;
+
+  const matchesByTeam = new Map<number, NonNullable<typeof allMatches>>();
+  for (const match of allMatches ?? []) {
+    for (const teamId of teamIds) {
+      if (match.home_team_id === teamId || match.away_team_id === teamId) {
+        const list = matchesByTeam.get(teamId) ?? [];
+        list.push(match);
+        matchesByTeam.set(teamId, list);
+      }
+    }
+  }
+
+  const teams = (selections ?? []).map((selection) => {
+      const raw = unwrapOne(selection.team) as {
         id: number;
         name_tr: string;
         group_code: string;
         tier: { name_tr: string } | { name_tr: string }[] | null;
       };
-      const tier = Array.isArray(raw.tier) ? raw.tier[0] ?? null : raw.tier;
+      const tier = unwrapOne(raw.tier);
       const teamId = raw.id;
 
-      const { data: matches, error: matchError } = await supabase
-        .from('matches')
-        .select(
-          'id, stage, status, scheduled_at, home_score, away_score, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
-        )
-        .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
-        .eq('status', 'finished')
-        .order('scheduled_at');
-
-      if (matchError) throw matchError;
+      const matches = matchesByTeam.get(teamId) ?? [];
 
       const teamEntries = entriesByTeam.get(teamId) ?? [];
       const pointsByMatch = new Map<number, typeof teamEntries>();
@@ -128,8 +143,7 @@ playerRoutes.get('/:username/points', async (c) => {
         finishedMatches,
         bonusEntries,
       };
-    }),
-  );
+    });
 
   const totalScore = teams.reduce((sum, t) => sum + t.team.totalPoints, 0);
 

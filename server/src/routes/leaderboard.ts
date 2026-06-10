@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, type AppVariables } from '../middleware/auth.js';
-import { buildPlayerLeaderboard } from '../services/leaderboard-service.js';
+import { buildPlayerLeaderboard, loadTeamPointsMap } from '../services/leaderboard-service.js';
+import { unwrapOne } from '../lib/serializers.js';
 
 const leaderboardRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -10,14 +11,11 @@ leaderboardRoutes.use('*', authMiddleware);
 leaderboardRoutes.get('/', async (c) => {
   const user = c.get('user');
 
-  // Player list is scoped to the caller's competition (empty when unassigned).
-  // Team standings stay global since they're tournament-wide data, not players.
-  const entries = await buildPlayerLeaderboard(user.competitionId, user.id);
-
-  const { data: totals, error: totalError } = await supabase.from('team_total_points').select('*');
-  if (totalError) throw totalError;
-
-  const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
+  // Team standings and the player leaderboard both need team totals; load the
+  // view once and share it (the player list is scoped to the caller's
+  // competition, empty when unassigned — team standings stay global).
+  const pointsMap = await loadTeamPointsMap();
+  const entries = await buildPlayerLeaderboard(user.competitionId, user.id, pointsMap);
 
   const { data: ownSelections, error: ownSelError } = await supabase
     .from('team_selections')
@@ -44,7 +42,7 @@ leaderboardRoutes.get('/', async (c) => {
 
   const teamStandings = ((teams ?? []) as TeamRow[])
     .map((team) => {
-      const tier = Array.isArray(team.tier) ? team.tier[0] ?? null : team.tier;
+      const tier = unwrapOne(team.tier);
       return {
         teamId: team.id,
         name: team.name_tr,
