@@ -3,29 +3,19 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Card from 'primevue/card';
 import Button from 'primevue/button';
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
 import Message from 'primevue/message';
 import { useToast } from 'primevue/usetoast';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
+import PlayerLeaderboardTable from '@/components/PlayerLeaderboardTable.vue';
+import type { PlayerLeaderboardEntry } from '@/utils/leaderboard';
 import api from '@/api/client';
-
-type PlayerEntry = {
-  rank: number;
-  username: string;
-  displayName: string;
-  totalScore: number;
-  isCurrentUser: boolean;
-  hasSelections: boolean;
-  selections: Array<{ name: string; points: number }>;
-};
 
 const router = useRouter();
 const toast = useToast();
 const loading = ref(true);
 const enabled = ref(true);
-const entries = ref<PlayerEntry[]>([]);
+const entries = ref<PlayerLeaderboardEntry[]>([]);
 
 onMounted(async () => {
   const [{ data: statusData }, { data: lbData }] = await Promise.all([
@@ -37,24 +27,7 @@ onMounted(async () => {
   loading.value = false;
 });
 
-function formatSelections(entry: PlayerEntry) {
-  if (!entry.hasSelections) return 'Atama yapılmadı';
-  return entry.selections.map((s) => `${s.name} (${s.points}p)`).join(', ');
-}
-
-function playerRowClass(data: PlayerEntry) {
-  return data.isCurrentUser ? 'row-highlight' : '';
-}
-
-function rankLabel(rank: number) {
-  if (rank === 1) return '🥇';
-  if (rank === 2) return '🥈';
-  if (rank === 3) return '🥉';
-  return rank;
-}
-
-function onPlayerRowClick(event: { data: PlayerEntry }) {
-  const entry = event.data;
+function onSelect(entry: PlayerLeaderboardEntry) {
   if (!entry.hasSelections) {
     toast.add({
       severity: 'info',
@@ -95,45 +68,12 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 
     <Card v-else class="leaderboard-card">
       <template #content>
-        <DataTable
-          :value="entries"
-          striped-rows
-          :row-class="playerRowClass"
-          responsive-layout="scroll"
-          class="players-table"
-          @row-click="onPlayerRowClick"
-        >
-          <Column header="#" style="width: 4rem">
-            <template #body="{ data }">
-              <span class="rank-cell">{{ rankLabel(data.rank) }}</span>
-            </template>
-          </Column>
-          <Column header="Oyuncu" body-class="player-name-col" style="min-width: 7rem">
-            <template #body="{ data }">
-              <span class="name-cell">{{ data.displayName }}</span>
-            </template>
-          </Column>
-          <Column field="totalScore" header="Toplam Puan" style="width: 8rem; min-width: 8rem">
-            <template #body="{ data }">
-              <strong>{{ data.totalScore }}</strong>
-            </template>
-          </Column>
-          <Column
-            header="Atanan Takımlar"
-            header-class="selections-col"
-            body-class="selections-col"
-            style="min-width: 16rem"
-          >
-            <template #body="{ data }">
-              <span :class="{ 'text-muted': !data.hasSelections }">
-                {{ formatSelections(data) }}
-              </span>
-            </template>
-          </Column>
-          <template #empty>
-            <span class="text-muted">Henüz bir yarışmaya atanmadınız. Yöneticiyle iletişime geçin.</span>
-          </template>
-        </DataTable>
+        <PlayerLeaderboardTable
+          :entries="entries"
+          selections-header="Atanan Takımlar"
+          empty-selections-label="Atama yapılmadı"
+          @select="onSelect"
+        />
       </template>
     </Card>
   </div>
@@ -142,25 +82,5 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
 <style scoped>
 .leaderboard-card :deep(.p-card-body) {
   padding-top: 0.85rem;
-}
-
-.rank-cell {
-  font-weight: 600;
-  min-width: 2rem;
-  display: inline-block;
-  text-align: center;
-}
-
-.name-cell {
-  font-weight: 500;
-}
-
-.leaderboard-card :deep(.player-name-col),
-.leaderboard-card :deep(.selections-col) {
-  white-space: nowrap;
-}
-
-.players-table :deep(.p-datatable-tbody > tr) {
-  cursor: pointer;
 }
 </style>
