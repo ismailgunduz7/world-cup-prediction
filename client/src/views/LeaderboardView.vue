@@ -237,6 +237,9 @@ function onPlayerRowClick(event: { data: PlayerEntry }) {
                 </span>
               </template>
             </Column>
+            <template #empty>
+              <span class="text-muted">Henüz bir yarışmaya atanmadınız. Yöneticiyle iletişime geçin.</span>
+            </template>
           </DataTable>
         </div>
 

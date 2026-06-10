@@ -4,6 +4,7 @@ export type UserRow = {
   password_hash: string;
   display_name: string;
   is_admin: boolean;
+  competition_id: string | null;
   created_at: string;
 };
 
@@ -118,6 +119,7 @@ export type AuthUser = {
   username: string;
   displayName: string;
   isAdmin: boolean;
+  competitionId: string | null;
 };
 
 export type TeamWithTier = TeamRow & {

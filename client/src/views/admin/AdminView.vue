@@ -35,14 +35,24 @@ type UserRow = {
   username: string;
   display_name: string;
   is_admin: boolean;
+  competition_id: string | null;
+};
+
+type Competition = {
+  id: string;
+  key: string;
+  name: string;
+  random_mode_enabled: boolean;
+  created_at: string;
 };
 
 type TeamOption = { id: number; name_tr: string; group_code: string };
 
-type AdminTab = 'users' | 'rules' | 'settings' | 'matches' | 'groups' | 'random';
+type AdminTab = 'users' | 'competitions' | 'rules' | 'settings' | 'matches' | 'groups' | 'random';
 
 const adminTabs: Array<{ key: AdminTab; label: string }> = [
   { key: 'users', label: 'Kullanıcılar' },
+  { key: 'competitions', label: 'Yarışmalar' },
   { key: 'rules', label: 'Kurallar' },
   { key: 'settings', label: 'Ayarlar' },
   { key: 'matches', label: 'Maçlar' },
@@ -134,7 +144,13 @@ const eligibleTeamsMeta = ref<{ qualifierCount: number | null; requiredQualifier
 );
 const loadingEligibleTeams = ref(false);
 
-const newUser = ref({ username: '', password: '', displayName: '', isAdmin: false });
+const newUser = ref({
+  username: '',
+  password: '',
+  displayName: '',
+  isAdmin: false,
+  competitionId: null as string | null,
+});
 const newUserErrors = ref<ValidationErrors>({});
 
 const editUserVisible = ref(false);
@@ -144,13 +160,36 @@ const editUser = ref({
   password: '',
   displayName: '',
   isAdmin: false,
+  competitionId: null as string | null,
 });
 const editUserErrors = ref<ValidationErrors>({});
 
 const scoringFlags = ref({ group_stage_counts_as_round_advancement: false });
 
-const randomModeEnabled = ref(true);
-const savingRandomMode = ref(false);
+// --- Competitions ---
+const competitions = ref<Competition[]>([]);
+const newCompetition = ref({ key: '', name: '', randomModeEnabled: false });
+const newCompetitionErrors = ref<ValidationErrors>({});
+const savingCompetition = ref(false);
+
+const editCompetitionVisible = ref(false);
+const editCompetition = ref({ id: '', key: '', name: '', randomModeEnabled: false });
+const editCompetitionErrors = ref<ValidationErrors>({});
+
+const competitionLeaderboardId = ref<string | null>(null);
+const competitionLeaderboard = ref<
+  Array<{ rank: number; displayName: string; totalScore: number; hasSelections: boolean }>
+>([]);
+const loadingCompetitionLeaderboard = ref(false);
+
+const competitionOptions = computed(() => [
+  { label: '— Yok —', value: null as string | null },
+  ...competitions.value.map((comp) => ({ label: `${comp.name} (${comp.key})`, value: comp.id })),
+]);
+
+function competitionMemberCount(id: string): number {
+  return users.value.filter((u) => !u.is_admin && u.competition_id === id).length;
+}
 
 type RandomSelectionRow = {
   userId: string;
@@ -390,11 +429,10 @@ async function loadDashboard() {
   rules.value = data.rules;
   config.value = data.config;
   matchCount.value = data.matchCount;
+  competitions.value = data.competitions ?? [];
 
   const flags = data.config.find((c: { key: string }) => c.key === 'scoring_flags');
   if (flags) scoringFlags.value = flags.value as typeof scoringFlags.value;
-  const randomCfg = data.config.find((c: { key: string }) => c.key === 'random_mode');
-  if (randomCfg) randomModeEnabled.value = (randomCfg.value as { enabled?: boolean }).enabled !== false;
   applySelectionLockConfig(data.config);
 
   const [{ data: matchData }, { data: teamData }] = await Promise.all([
@@ -451,9 +489,10 @@ async function createUser() {
       password: newUser.value.password,
       displayName: newUser.value.displayName.trim(),
       isAdmin: newUser.value.isAdmin,
+      competitionId: newUser.value.isAdmin ? null : newUser.value.competitionId,
     });
     toast.add({ severity: 'success', summary: 'Kullanıcı oluşturuldu', life: 3000 });
-    newUser.value = { username: '', password: '', displayName: '', isAdmin: false };
+    newUser.value = { username: '', password: '', displayName: '', isAdmin: false, competitionId: null };
     newUserErrors.value = {};
     await loadDashboard();
   } catch (err: unknown) {
@@ -468,6 +507,7 @@ function openEditUser(user: UserRow) {
     password: '',
     displayName: user.display_name,
     isAdmin: user.is_admin,
+    competitionId: user.competition_id,
   };
   editUserErrors.value = {};
   editUserVisible.value = true;
@@ -506,12 +546,31 @@ async function saveEditUser() {
       displayName: editUser.value.displayName.trim(),
       isAdmin: editUser.value.isAdmin,
       password: editUser.value.password.trim() || undefined,
+      competitionId: editUser.value.isAdmin ? null : editUser.value.competitionId,
     });
     toast.add({ severity: 'success', summary: 'Kullanıcı güncellendi', life: 3000 });
     editUserVisible.value = false;
     await loadDashboard();
   } catch (err: unknown) {
     toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
+  }
+}
+
+// Inline reassignment straight from the users table.
+async function assignCompetition(user: UserRow, competitionId: string | null) {
+  if (user.competition_id === competitionId) return;
+  try {
+    await api.put(`/admin/${ADMIN_PATH}/users/${user.id}`, {
+      username: user.username,
+      displayName: user.display_name,
+      isAdmin: user.is_admin,
+      competitionId,
+    });
+    user.competition_id = competitionId;
+    toast.add({ severity: 'success', summary: 'Yarışma güncellendi', life: 2000 });
+  } catch (err: unknown) {
+    toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
+    await loadDashboard();
   }
 }
 
@@ -724,15 +783,127 @@ async function saveScoringFlags() {
   toast.add({ severity: 'success', summary: 'Ayar kaydedildi', life: 3000 });
 }
 
-async function saveRandomModeFlag() {
-  savingRandomMode.value = true;
+function validateCompetition(value: { key: string; name: string }, errors: ValidationErrors): boolean {
+  const keyReq = required(value.key, 'Anahtar');
+  if (keyReq) errors.key = keyReq;
+  else if (!/^[a-z0-9-]+$/.test(value.key.trim())) {
+    errors.key = 'Anahtar yalnızca küçük harf, rakam ve tire içerebilir';
+  } else {
+    const m = minLength(value.key.trim(), 2, 'Anahtar');
+    if (m) errors.key = m;
+  }
+
+  const nameReq = required(value.name, 'Ad');
+  if (nameReq) errors.name = nameReq;
+  else {
+    const m = minLength(value.name.trim(), 2, 'Ad');
+    if (m) errors.name = m;
+  }
+
+  return !hasErrors(errors);
+}
+
+async function createCompetition() {
+  const errors: ValidationErrors = {};
+  if (!validateCompetition(newCompetition.value, errors)) {
+    newCompetitionErrors.value = errors;
+    return;
+  }
+  newCompetitionErrors.value = {};
+
+  savingCompetition.value = true;
   try {
-    await api.put(`/admin/${ADMIN_PATH}/config/random_mode`, {
-      value: { enabled: randomModeEnabled.value },
+    await api.post(`/admin/${ADMIN_PATH}/competitions`, {
+      key: newCompetition.value.key.trim(),
+      name: newCompetition.value.name.trim(),
+      randomModeEnabled: newCompetition.value.randomModeEnabled,
     });
-    toast.add({ severity: 'success', summary: 'Ayar kaydedildi', life: 3000 });
+    toast.add({ severity: 'success', summary: 'Yarışma oluşturuldu', life: 3000 });
+    newCompetition.value = { key: '', name: '', randomModeEnabled: false };
+    await loadDashboard();
+  } catch (err: unknown) {
+    toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
   } finally {
-    savingRandomMode.value = false;
+    savingCompetition.value = false;
+  }
+}
+
+function openEditCompetition(comp: Competition) {
+  editCompetition.value = {
+    id: comp.id,
+    key: comp.key,
+    name: comp.name,
+    randomModeEnabled: comp.random_mode_enabled,
+  };
+  editCompetitionErrors.value = {};
+  editCompetitionVisible.value = true;
+}
+
+async function saveEditCompetition() {
+  const errors: ValidationErrors = {};
+  if (!validateCompetition(editCompetition.value, errors)) {
+    editCompetitionErrors.value = errors;
+    return;
+  }
+  editCompetitionErrors.value = {};
+
+  try {
+    await api.put(`/admin/${ADMIN_PATH}/competitions/${editCompetition.value.id}`, {
+      key: editCompetition.value.key.trim(),
+      name: editCompetition.value.name.trim(),
+      randomModeEnabled: editCompetition.value.randomModeEnabled,
+    });
+    toast.add({ severity: 'success', summary: 'Yarışma güncellendi', life: 3000 });
+    editCompetitionVisible.value = false;
+    await loadDashboard();
+  } catch (err: unknown) {
+    toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
+  }
+}
+
+function confirmDeleteCompetition(comp: Competition) {
+  const count = competitionMemberCount(comp.id);
+  confirm.require({
+    header: 'Yarışmayı Sil',
+    message:
+      count > 0
+        ? `"${comp.name}" silinecek. ${count} oyuncu bu yarışmadan çıkarılacak (atanmamış olacak). Emin misiniz?`
+        : `"${comp.name}" silinecek. Emin misiniz?`,
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'İptal',
+    acceptLabel: 'Sil',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await api.delete(`/admin/${ADMIN_PATH}/competitions/${comp.id}`);
+        toast.add({ severity: 'success', summary: 'Yarışma silindi', life: 3000 });
+        if (competitionLeaderboardId.value === comp.id) {
+          competitionLeaderboardId.value = null;
+          competitionLeaderboard.value = [];
+        }
+        await loadDashboard();
+      } catch (err: unknown) {
+        toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
+      }
+    },
+  });
+}
+
+async function loadCompetitionLeaderboard() {
+  if (!competitionLeaderboardId.value) {
+    competitionLeaderboard.value = [];
+    return;
+  }
+  loadingCompetitionLeaderboard.value = true;
+  try {
+    const { data } = await api.get(
+      `/admin/${ADMIN_PATH}/competitions/${competitionLeaderboardId.value}/leaderboard`,
+    );
+    competitionLeaderboard.value = data.entries;
+  } catch (err: unknown) {
+    toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
+  } finally {
+    loadingCompetitionLeaderboard.value = false;
   }
 }
 
@@ -1320,6 +1491,20 @@ function isSelf(userId: string) {
           <Column header="Yönetici">
             <template #body="{ data }">{{ data.is_admin ? 'Evet' : 'Hayır' }}</template>
           </Column>
+          <Column header="Yarışma" style="width: 14rem">
+            <template #body="{ data }">
+              <span v-if="data.is_admin" class="text-muted">—</span>
+              <Select
+                v-else
+                :model-value="data.competition_id"
+                :options="competitionOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+                @update:model-value="(value: string | null) => assignCompetition(data, value)"
+              />
+            </template>
+          </Column>
           <Column header="İşlemler" style="width: 10rem">
             <template #body="{ data }">
               <Button icon="pi pi-pencil" text rounded @click="openEditUser(data)" />
@@ -1357,12 +1542,122 @@ function isSelf(userId: string) {
               </div>
               <span class="field-error-spacer" aria-hidden="true" />
             </div>
+            <div v-if="!newUser.isAdmin" class="form-field">
+              <Select
+                v-model="newUser.competitionId"
+                :options="competitionOptions"
+                option-label="label"
+                option-value="value"
+                placeholder="Yarışma (opsiyonel)"
+                class="w-full"
+              />
+              <span class="field-error-spacer" aria-hidden="true" />
+            </div>
             <div class="form-field form-field-action">
               <Button label="Oluştur" icon="pi pi-user-plus" @click="createUser" />
               <span class="field-error-spacer" aria-hidden="true" />
             </div>
           </div>
         </div>
+        </div>
+
+        <div v-show="activeTab === 'competitions'" class="admin-tab-panel" role="tabpanel">
+          <Message severity="info" :closable="false" class="mb-2">
+            Yarışmalar oyuncuları gruplara ayırır. Her oyuncu yalnızca kendi yarışmasındaki oyuncuları
+            görür ve başka yarışmadaki oyuncuları göremez. Rastgele mod her yarışma için ayrı açılır.
+          </Message>
+
+          <DataTable :value="competitions" size="small" responsive-layout="scroll">
+            <Column field="name" header="Ad" />
+            <Column field="key" header="Anahtar">
+              <template #body="{ data }"><code>{{ data.key }}</code></template>
+            </Column>
+            <Column header="Rastgele mod">
+              <template #body="{ data }">
+                <Tag
+                  :value="data.random_mode_enabled ? 'Açık' : 'Kapalı'"
+                  :severity="data.random_mode_enabled ? 'success' : 'secondary'"
+                />
+              </template>
+            </Column>
+            <Column header="Oyuncu sayısı">
+              <template #body="{ data }">{{ competitionMemberCount(data.id) }}</template>
+            </Column>
+            <Column header="İşlemler" style="width: 8rem">
+              <template #body="{ data }">
+                <Button icon="pi pi-pencil" text rounded @click="openEditCompetition(data)" />
+                <Button
+                  icon="pi pi-trash"
+                  text
+                  rounded
+                  severity="danger"
+                  @click="confirmDeleteCompetition(data)"
+                />
+              </template>
+            </Column>
+            <template #empty>
+              <span class="text-muted">Henüz yarışma yok.</span>
+            </template>
+          </DataTable>
+
+          <div class="form-block">
+            <h3 class="section-title">Yeni Yarışma</h3>
+            <div class="form-grid">
+              <div class="form-field">
+                <InputText v-model="newCompetition.name" placeholder="Ad (örn. Aile)" class="w-full" />
+                <FormFieldError :message="pickError(newCompetitionErrors, 'name')" />
+              </div>
+              <div class="form-field">
+                <InputText v-model="newCompetition.key" placeholder="Anahtar (örn. aile)" class="w-full" />
+                <FormFieldError :message="pickError(newCompetitionErrors, 'key')" />
+              </div>
+              <div class="form-field form-field-toggle">
+                <div class="toggle-row">
+                  <ToggleSwitch v-model="newCompetition.randomModeEnabled" />
+                  <label>Rastgele mod açık</label>
+                </div>
+                <span class="field-error-spacer" aria-hidden="true" />
+              </div>
+              <div class="form-field form-field-action">
+                <Button label="Oluştur" icon="pi pi-plus" :loading="savingCompetition" @click="createCompetition" />
+                <span class="field-error-spacer" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+
+          <section class="settings-section">
+            <h3 class="section-title">Yarışma liderlik tablosu</h3>
+            <Message severity="info" :closable="false">
+              Bir yarışma seçerek oyuncularının gördüğü liderlik tablosunu izleyebilirsiniz.
+            </Message>
+            <div class="form-field">
+              <Select
+                v-model="competitionLeaderboardId"
+                :options="competitions"
+                option-label="name"
+                option-value="id"
+                placeholder="Yarışma seçin"
+                class="w-full"
+                @update:model-value="loadCompetitionLeaderboard"
+              />
+            </div>
+            <LoadingState v-if="loadingCompetitionLeaderboard" />
+            <DataTable
+              v-else-if="competitionLeaderboardId"
+              :value="competitionLeaderboard"
+              size="small"
+              responsive-layout="scroll"
+            >
+              <Column field="rank" header="#" style="width: 4rem" />
+              <Column field="displayName" header="Oyuncu" />
+              <Column header="Puan" style="width: 7rem">
+                <template #body="{ data }">{{ data.totalScore }}</template>
+              </Column>
+              <template #empty>
+                <span class="text-muted">Bu yarışmada oyuncu yok.</span>
+              </template>
+            </DataTable>
+          </section>
         </div>
 
         <div v-show="activeTab === 'rules'" class="admin-tab-panel" role="tabpanel">
@@ -1518,13 +1813,8 @@ function isSelf(userId: string) {
         <section class="settings-section">
           <h3 class="section-title">Rastgele mod</h3>
           <Message severity="info" :closable="false">
-            Rastgele takım atama modunu site genelinde açıp kapatabilirsiniz. Kapalıyken oyuncular bu moda erişemez.
+            Rastgele mod artık her yarışma için ayrı ayrı açılıp kapatılır. "Yarışmalar" sekmesinden ilgili yarışmayı düzenleyin.
           </Message>
-          <div class="settings-control">
-            <ToggleSwitch v-model="randomModeEnabled" input-id="random-mode-enabled" />
-            <label for="random-mode-enabled">Rastgele mod açık</label>
-          </div>
-          <Button label="Kaydet" icon="pi pi-check" :loading="savingRandomMode" @click="saveRandomModeFlag" />
         </section>
         </div>
 
@@ -2026,10 +2316,45 @@ function isSelf(userId: string) {
             <ToggleSwitch v-model="editUser.isAdmin" :disabled="isSelf(editUser.id)" />
           </div>
         </div>
+        <div v-if="!editUser.isAdmin" class="form-field">
+          <label>Yarışma</label>
+          <Select
+            v-model="editUser.competitionId"
+            :options="competitionOptions"
+            option-label="label"
+            option-value="value"
+            class="w-full"
+          />
+        </div>
       </div>
       <template #footer>
         <Button label="İptal" severity="secondary" text @click="editUserVisible = false" />
         <Button label="Kaydet" icon="pi pi-check" @click="saveEditUser" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="editCompetitionVisible" header="Yarışma Düzenle" modal :style="{ width: 'min(28rem, 92vw)' }">
+      <div class="dialog-form">
+        <div class="form-field">
+          <label>Ad</label>
+          <InputText v-model="editCompetition.name" class="w-full" />
+          <FormFieldError :message="pickError(editCompetitionErrors, 'name')" />
+        </div>
+        <div class="form-field">
+          <label>Anahtar</label>
+          <InputText v-model="editCompetition.key" class="w-full" />
+          <FormFieldError :message="pickError(editCompetitionErrors, 'key')" />
+        </div>
+        <div class="form-field">
+          <label>Rastgele mod</label>
+          <div class="switch-align">
+            <ToggleSwitch v-model="editCompetition.randomModeEnabled" />
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <Button label="İptal" severity="secondary" text @click="editCompetitionVisible = false" />
+        <Button label="Kaydet" icon="pi pi-check" @click="saveEditCompetition" />
       </template>
     </Dialog>
 

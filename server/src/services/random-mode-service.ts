@@ -1,10 +1,19 @@
-import { getConfigValue } from './tournament-config.js';
+import { supabase } from '../lib/config.js';
 
 /**
- * Global feature flag for random mode, stored under the `random_mode` config key.
- * Defaults to enabled when the row is missing.
+ * Whether random mode is enabled for a given competition. Random mode is now a
+ * per-competition toggle (`competitions.random_mode_enabled`). Users not
+ * assigned to any competition can never use random mode.
  */
-export async function isRandomModeEnabled(): Promise<boolean> {
-  const value = await getConfigValue<{ enabled: boolean }>('random_mode', { enabled: true });
-  return value.enabled !== false;
+export async function isRandomModeEnabledForUser(competitionId: string | null): Promise<boolean> {
+  if (!competitionId) return false;
+
+  const { data, error } = await supabase
+    .from('competitions')
+    .select('random_mode_enabled')
+    .eq('id', competitionId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.random_mode_enabled === true;
 }

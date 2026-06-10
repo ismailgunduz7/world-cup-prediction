@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
 import { areSelectionsLocked } from '../services/tournament-config.js';
-import { isRandomModeEnabled } from '../services/random-mode-service.js';
+import { isRandomModeEnabledForUser } from '../services/random-mode-service.js';
 
 const SLOT_COUNT = 3;
 
@@ -123,7 +123,7 @@ randomModeRoutes.get('/mine', async (c) => {
   const user = c.get('user');
   const [{ entry, teams }, enabled, selectionsLocked] = await Promise.all([
     getEntryWithTeams(user.id),
-    isRandomModeEnabled(),
+    isRandomModeEnabledForUser(user.competitionId),
     areSelectionsLocked(),
   ]);
 
@@ -143,7 +143,7 @@ randomModeRoutes.get('/mine', async (c) => {
 randomModeRoutes.post('/trigger', async (c) => {
   const user = c.get('user');
 
-  if (!(await isRandomModeEnabled())) {
+  if (!(await isRandomModeEnabledForUser(user.competitionId))) {
     return c.json({ error: 'Rastgele mod şu anda kapalı' }, 403);
   }
   if (await areSelectionsLocked()) {
@@ -215,7 +215,7 @@ randomModeRoutes.post('/trigger', async (c) => {
 randomModeRoutes.post('/reroll', async (c) => {
   const user = c.get('user');
 
-  if (!(await isRandomModeEnabled())) {
+  if (!(await isRandomModeEnabledForUser(user.competitionId))) {
     return c.json({ error: 'Rastgele mod şu anda kapalı' }, 403);
   }
   if (await areSelectionsLocked()) {
@@ -289,10 +289,17 @@ randomModeRoutes.post('/reroll', async (c) => {
 randomModeRoutes.get('/leaderboard', async (c) => {
   const user = c.get('user');
 
+  // Players only see others within their own competition; unassigned users see
+  // an empty leaderboard.
+  if (!user.competitionId) {
+    return c.json({ entries: [] });
+  }
+
   const { data: users, error: userError } = await supabase
     .from('users')
     .select('id, username, display_name')
     .eq('is_admin', false)
+    .eq('competition_id', user.competitionId)
     .order('display_name');
   if (userError) throw userError;
 

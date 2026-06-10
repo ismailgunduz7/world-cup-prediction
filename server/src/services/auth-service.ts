@@ -26,6 +26,7 @@ function toAuthUser(user: UserRow): AuthUser {
     username: user.username,
     displayName: user.display_name,
     isAdmin: user.is_admin,
+    competitionId: user.competition_id ?? null,
   };
 }
 
@@ -45,15 +46,19 @@ export async function createUser(input: {
   password: string;
   displayName: string;
   isAdmin?: boolean;
+  competitionId?: string | null;
 }): Promise<AuthUser> {
   const passwordHash = await hashPassword(input.password);
+  const isAdmin = input.isAdmin ?? false;
   const { data, error } = await supabase
     .from('users')
     .insert({
       username: input.username,
       password_hash: passwordHash,
       display_name: input.displayName,
-      is_admin: input.isAdmin ?? false,
+      is_admin: isAdmin,
+      // Admins never participate, so they're never assigned to a competition.
+      competition_id: isAdmin ? null : input.competitionId ?? null,
     })
     .select('*')
     .single();
@@ -191,6 +196,7 @@ export async function updateUser(
     displayName: string;
     isAdmin: boolean;
     password?: string;
+    competitionId?: string | null;
   },
 ): Promise<AuthUser> {
   const existing = await findUserById(id);
@@ -203,6 +209,13 @@ export async function updateUser(
     display_name: input.displayName.trim(),
     is_admin: input.isAdmin,
   };
+
+  // Admins never participate; promoting to admin clears any competition.
+  if (input.isAdmin) {
+    updates.competition_id = null;
+  } else if (input.competitionId !== undefined) {
+    updates.competition_id = input.competitionId;
+  }
 
   if (input.password && input.password.trim().length > 0) {
     if (input.password.trim().length < 6) {

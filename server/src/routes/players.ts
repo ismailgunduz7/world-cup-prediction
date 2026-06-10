@@ -8,18 +8,22 @@ const playerRoutes = new Hono<{ Variables: AppVariables }>();
 playerRoutes.use('*', authMiddleware, participantMiddleware);
 
 playerRoutes.get('/:username/points', async (c) => {
+  const requester = c.get('user');
   const username = c.req.param('username');
   const mode = c.req.query('mode') === 'random' ? 'random' : 'real';
 
   const { data: player, error: playerError } = await supabase
     .from('users')
-    .select('id, display_name')
+    .select('id, display_name, competition_id')
     .eq('username', username)
     .eq('is_admin', false)
     .maybeSingle();
 
   if (playerError) throw playerError;
-  if (!player) {
+  // Enforce competition isolation: the target must be in the requester's
+  // competition. A mismatch (or an unassigned requester) returns 404 so the
+  // existence of players in other competitions is never leaked.
+  if (!player || !requester.competitionId || player.competition_id !== requester.competitionId) {
     return c.json({ error: 'Oyuncu bulunamadı' }, 404);
   }
 

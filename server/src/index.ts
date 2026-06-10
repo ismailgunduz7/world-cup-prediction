@@ -14,9 +14,10 @@ import meRoutes from './routes/me.js';
 import bracketRoutes from './routes/bracket.js';
 import randomModeRoutes from './routes/random-mode.js';
 import { getSelectionLockAt, hasTournamentStarted, areSelectionsLocked } from './services/tournament-config.js';
-import { isRandomModeEnabled } from './services/random-mode-service.js';
+import { isRandomModeEnabledForUser } from './services/random-mode-service.js';
+import { optionalAuthMiddleware, type AppVariables } from './middleware/auth.js';
 
-const app = new Hono();
+const app = new Hono<{ Variables: AppVariables }>();
 
 app.use(
   '*',
@@ -41,12 +42,15 @@ app.route('/api/bracket', bracketRoutes);
 app.route('/api/random-mode', randomModeRoutes);
 app.route(`/api/admin/${config.adminPath}`, adminRoutes);
 
-app.get('/api/tournament/status', async (c) => {
+app.get('/api/tournament/status', optionalAuthMiddleware, async (c) => {
+  // Random mode is per-competition, so the flag is resolved against the caller's
+  // competition. Unauthenticated/unassigned callers get `false`.
+  const currentUser = c.get('user');
   const [selectionsLocked, tournamentStarted, lockAt, randomModeEnabled] = await Promise.all([
     areSelectionsLocked(),
     hasTournamentStarted(),
     getSelectionLockAt(),
-    isRandomModeEnabled(),
+    isRandomModeEnabledForUser(currentUser?.competitionId ?? null),
   ]);
 
   return c.json({

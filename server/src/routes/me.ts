@@ -12,7 +12,7 @@ meRoutes.get('/', (c) => c.json({ user: c.get('user') }));
 
 meRoutes.get('/dashboard', participantMiddleware, async (c) => {
   const user = c.get('user');
-  const data = await getDashboardData(user.id);
+  const data = await getDashboardData(user.id, user.competitionId);
   return c.json(data);
 });
 

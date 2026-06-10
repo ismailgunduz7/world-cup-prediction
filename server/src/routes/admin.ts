@@ -13,6 +13,7 @@ import {
 } from '../services/scoring-engine.js';
 import { setConfigValue } from '../services/tournament-config.js';
 import { getGroupStandingsSummaries } from '../services/group-standings-service.js';
+import { buildPlayerLeaderboard } from '../services/leaderboard-service.js';
 import {
   computeBestThirdRankings,
   getBestThirdSummary,
@@ -39,15 +40,25 @@ const adminRoutes = new Hono<{ Variables: AppVariables }>();
 adminRoutes.use('*', authMiddleware, adminMiddleware);
 
 adminRoutes.get('/dashboard', async (c) => {
-  const [{ data: users }, { data: rules }, { data: config }, { count: matchCount }] =
+  const [{ data: users }, { data: rules }, { data: config }, { count: matchCount }, { data: competitions }] =
     await Promise.all([
-      supabase.from('users').select('id, username, display_name, is_admin, created_at').order('created_at'),
+      supabase
+        .from('users')
+        .select('id, username, display_name, is_admin, competition_id, created_at')
+        .order('created_at'),
       supabase.from('tier_scoring_rules').select('*, rule_type:scoring_rule_types(*), tier:tiers(*)').order('rule_type_id'),
       supabase.from('tournament_config').select('*').order('key'),
       supabase.from('matches').select('*', { count: 'exact', head: true }),
+      supabase.from('competitions').select('*').order('created_at'),
     ]);
 
-  return c.json({ users: users ?? [], rules: rules ?? [], config: config ?? [], matchCount: matchCount ?? 0 });
+  return c.json({
+    users: users ?? [],
+    rules: rules ?? [],
+    config: config ?? [],
+    matchCount: matchCount ?? 0,
+    competitions: competitions ?? [],
+  });
 });
 
 adminRoutes.post('/users', async (c) => {
@@ -56,12 +67,17 @@ adminRoutes.post('/users', async (c) => {
     password: z.string().min(6).max(128),
     displayName: z.string().min(2).max(100),
     isAdmin: z.boolean().optional(),
+    competitionId: z.string().uuid().nullable().optional(),
   });
 
   const body = await c.req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: 'Geçersiz kullanıcı bilgileri' }, 400);
+  }
+
+  if (parsed.data.competitionId && !(await competitionExists(parsed.data.competitionId))) {
+    return c.json({ error: 'Geçersiz yarışma' }, 400);
   }
 
   try {
@@ -78,6 +94,7 @@ const updateUserSchema = z
     displayName: z.string().min(2).max(100),
     isAdmin: z.boolean(),
     password: z.string().max(128).optional(),
+    competitionId: z.string().uuid().nullable().optional(),
   })
   .refine((data) => !data.password || data.password.length === 0 || data.password.length >= 6, {
     message: 'Şifre en az 6 karakter olmalıdır',
@@ -96,6 +113,10 @@ adminRoutes.put('/users/:id', async (c) => {
 
   if (userId === currentAdmin.id && !parsed.data.isAdmin) {
     return c.json({ error: 'Kendi yönetici yetkinizi kaldıramazsınız' }, 400);
+  }
+
+  if (parsed.data.competitionId && !(await competitionExists(parsed.data.competitionId))) {
+    return c.json({ error: 'Geçersiz yarışma' }, 400);
   }
 
   try {
@@ -120,6 +141,117 @@ adminRoutes.delete('/users/:id', async (c) => {
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Kullanıcı silinemedi' }, 400);
   }
+});
+
+// --- Competitions -----------------------------------------------------------
+
+async function competitionExists(id: string): Promise<boolean> {
+  const { data, error } = await supabase.from('competitions').select('id').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+const competitionSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .min(2)
+    .max(40)
+    .regex(/^[a-z0-9-]+$/, 'Anahtar yalnızca küçük harf, rakam ve tire içerebilir'),
+  name: z.string().trim().min(2).max(100),
+  randomModeEnabled: z.boolean().optional().default(false),
+});
+
+adminRoutes.get('/competitions', async (c) => {
+  const [{ data: competitions, error: compError }, { data: members, error: memberError }] =
+    await Promise.all([
+      supabase.from('competitions').select('*').order('created_at'),
+      supabase.from('users').select('competition_id').eq('is_admin', false),
+    ]);
+
+  if (compError) throw compError;
+  if (memberError) throw memberError;
+
+  const counts = new Map<string, number>();
+  for (const m of members ?? []) {
+    if (m.competition_id) counts.set(m.competition_id, (counts.get(m.competition_id) ?? 0) + 1);
+  }
+
+  return c.json({
+    competitions: (competitions ?? []).map((comp) => ({
+      ...comp,
+      memberCount: counts.get(comp.id) ?? 0,
+    })),
+  });
+});
+
+adminRoutes.post('/competitions', async (c) => {
+  const parsed = competitionSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: parsed.error.issues[0]?.message ?? 'Geçersiz yarışma bilgisi' }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from('competitions')
+    .insert({
+      key: parsed.data.key,
+      name: parsed.data.name,
+      random_mode_enabled: parsed.data.randomModeEnabled,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return c.json({ error: 'Bu anahtar zaten kullanılıyor' }, 400);
+    throw error;
+  }
+
+  return c.json({ competition: data }, 201);
+});
+
+adminRoutes.put('/competitions/:id', async (c) => {
+  const id = c.req.param('id');
+  const parsed = competitionSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: parsed.error.issues[0]?.message ?? 'Geçersiz yarışma bilgisi' }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from('competitions')
+    .update({
+      key: parsed.data.key,
+      name: parsed.data.name,
+      random_mode_enabled: parsed.data.randomModeEnabled,
+    })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '23505') return c.json({ error: 'Bu anahtar zaten kullanılıyor' }, 400);
+    throw error;
+  }
+  if (!data) return c.json({ error: 'Yarışma bulunamadı' }, 404);
+
+  return c.json({ competition: data });
+});
+
+adminRoutes.delete('/competitions/:id', async (c) => {
+  const id = c.req.param('id');
+  // Members are detached automatically via the ON DELETE SET NULL foreign key.
+  const { error } = await supabase.from('competitions').delete().eq('id', id);
+  if (error) throw error;
+  return c.json({ success: true });
+});
+
+// Admin monitoring: view a competition's leaderboard exactly as its players see it.
+adminRoutes.get('/competitions/:id/leaderboard', async (c) => {
+  const id = c.req.param('id');
+  if (!(await competitionExists(id))) {
+    return c.json({ error: 'Yarışma bulunamadı' }, 404);
+  }
+  const entries = await buildPlayerLeaderboard(id, null);
+  return c.json({ entries });
 });
 
 adminRoutes.put('/rules/bulk', async (c) => {
@@ -220,14 +352,6 @@ adminRoutes.put('/config/:key', async (c) => {
     });
     const parsed = schema.safeParse(body.value);
     if (!parsed.success) return c.json({ error: 'Geçersiz kilit tarihi' }, 400);
-    await setConfigValue(key, parsed.data);
-    return c.json({ success: true });
-  }
-
-  if (key === 'random_mode') {
-    const schema = z.object({ enabled: z.boolean() });
-    const parsed = schema.safeParse(body.value);
-    if (!parsed.success) return c.json({ error: 'Geçersiz rastgele mod ayarı' }, 400);
     await setConfigValue(key, parsed.data);
     return c.json({ success: true });
   }

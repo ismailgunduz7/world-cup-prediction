@@ -65,10 +65,19 @@ function resultForTeam(match: MatchWithTeams, teamId: number): 'win' | 'draw' | 
   return 'draw';
 }
 
-async function buildLeaderboardEntries() {
+async function buildLeaderboardEntries(competitionId: string | null) {
+  // Leaderboard is scoped to the user's competition; unassigned users have no
+  // ranked players (empty leaderboard).
+  if (!competitionId) return [];
+
   const [{ data: users, error: userError }, { data: selections, error: selError }, { data: totals, error: totalError }] =
     await Promise.all([
-      supabase.from('users').select('id, display_name').eq('is_admin', false).order('display_name'),
+      supabase
+        .from('users')
+        .select('id, display_name')
+        .eq('is_admin', false)
+        .eq('competition_id', competitionId)
+        .order('display_name'),
       supabase.from('team_selections').select('user_id, team_id'),
       supabase.from('team_total_points').select('*'),
     ]);
@@ -176,7 +185,7 @@ function buildPreTournamentResponse(
   };
 }
 
-export async function getDashboardData(userId: string) {
+export async function getDashboardData(userId: string, competitionId: string | null) {
   const [selectionsLocked, tournamentStarted, lockAt, startAt] = await Promise.all([
     areSelectionsLocked(),
     hasTournamentStarted(),
@@ -245,7 +254,7 @@ export async function getDashboardData(userId: string) {
 
   const [leaderboardEntries, groupSummaries, totalsResult, pointEntriesResult, matchesResult] =
     await Promise.all([
-      buildLeaderboardEntries(),
+      buildLeaderboardEntries(competitionId),
       getGroupStandingsSummaries(qualificationMap),
       supabase.from('team_total_points').select('*').in('team_id', teamIds),
       supabase
