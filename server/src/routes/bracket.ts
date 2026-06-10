@@ -8,6 +8,7 @@ import {
   type ThirdPlaceWinnerSlot,
 } from '../data/wc2026-knockout-bracket.js';
 import { getCombinationNumber, lookupThirdPlaceAssignments } from '../services/third-place-combinations.js';
+import { unwrapOne } from '../lib/serializers.js';
 
 const bracketRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -62,8 +63,7 @@ bracketRoutes.post('/preview', async (c) => {
   if (error) throw error;
   const infoMap = new Map(
     (teams ?? []).map((t) => {
-      const tier = t.tier as { name_tr: string } | { name_tr: string }[] | null;
-      const tierName = Array.isArray(tier) ? tier[0]?.name_tr ?? null : tier?.name_tr ?? null;
+      const tierName = unwrapOne(t.tier as { name_tr: string } | { name_tr: string }[] | null)?.name_tr ?? null;
       return [t.id, { name: t.name_tr, tier: tierName }];
     }),
   );

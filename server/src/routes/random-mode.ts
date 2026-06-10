@@ -4,6 +4,7 @@ import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
 import { areSelectionsLocked } from '../services/tournament-config.js';
 import { isRandomModeEnabledForUser } from '../services/random-mode-service.js';
+import { unwrapOne } from '../lib/serializers.js';
 
 const SLOT_COUNT = 3;
 
@@ -115,7 +116,7 @@ async function loadTeams(teamIds: number[]): Promise<TeamDTO[]> {
     .in('id', teamIds);
   if (teamError) throw teamError;
   return (teams ?? []).map((t) => {
-    const tier = Array.isArray(t.tier) ? t.tier[0] ?? null : t.tier;
+    const tier = unwrapOne(t.tier);
     return { id: t.id, name: t.name_tr, groupCode: t.group_code, tierName: tier?.name_tr ?? null };
   });
 }
@@ -357,7 +358,7 @@ randomModeRoutes.get('/leaderboard', async (c) => {
 
   const entries = (users ?? []).map((u) => {
     const userSlots = byUser.get(u.id) ?? [];
-    const teams = userSlots.map((s) => (Array.isArray(s.team) ? s.team[0] ?? null : s.team));
+    const teams = userSlots.map((s) => unwrapOne(s.team));
     const totalScore = teams.reduce((sum, team) => sum + (team ? pointsMap.get(team.id) ?? 0 : 0), 0);
     return {
       username: u.username,

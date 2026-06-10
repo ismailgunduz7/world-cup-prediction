@@ -5,6 +5,17 @@
  * vocabulary. See the plan/README for the full contract.
  */
 
+/**
+ * PostgREST returns an embedded to-one relationship as either an object or a
+ * single-element array depending on how the join is inferred. This normalizes
+ * both shapes to the single related row (or null), replacing the repeated
+ * `Array.isArray(x) ? x[0] ?? null : x` pattern across the routes.
+ */
+export function unwrapOne<T>(relation: T | T[] | null | undefined): T | null {
+  if (Array.isArray(relation)) return relation[0] ?? null;
+  return relation ?? null;
+}
+
 export type PointEntryDTO = {
   description: string;
   points: number;

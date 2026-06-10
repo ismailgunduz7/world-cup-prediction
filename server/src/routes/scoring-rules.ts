@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
 import { getConfigValue } from '../services/tournament-config.js';
+import { unwrapOne } from '../lib/serializers.js';
 
 const scoringRulesRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -31,13 +32,10 @@ scoringRulesRoutes.get('/', async (c) => {
     tier: { id: number; name_tr: string; sort_order: number } | null;
   };
 
-  const mapJoin = <T>(value: T | T[] | null): T | null =>
-    Array.isArray(value) ? value[0] ?? null : value;
-
   const mappedRules = ((rules ?? []) as unknown as RuleRow[])
     .map((rule) => {
-      const ruleType = mapJoin(rule.rule_type);
-      const tier = mapJoin(rule.tier);
+      const ruleType = unwrapOne(rule.rule_type);
+      const tier = unwrapOne(rule.tier);
       if (!ruleType || !tier) return null;
       return {
         id: rule.id,

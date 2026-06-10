@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
-import { toMatchSummary, toPointEntry } from '../lib/serializers.js';
+import { toMatchSummary, toPointEntry, unwrapOne } from '../lib/serializers.js';
 import {
   areSelectionsLocked,
   getSelectionLockAt,
@@ -33,7 +33,7 @@ teamRoutes.get('/', participantMiddleware, async (c) => {
   };
 
   const teamDtos = ((teams ?? []) as TeamRow[]).map((team) => {
-    const tier = Array.isArray(team.tier) ? team.tier[0] ?? null : team.tier;
+    const tier = unwrapOne(team.tier);
     return {
       id: team.id,
       name: team.name_tr,
