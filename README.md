@@ -19,6 +19,7 @@
 - [Puanlama Sistemi](#puanlama-sistemi)
 - [Turnuva Akışı](#turnuva-akışı)
 - [Yönetici Paneli](#yönetici-paneli)
+- [Bahis ilerlemesi (bet-client)](#bahis-ilerlemesi-bet-client)
 - [Komut Satırı Araçları](#komut-satırı-araçları)
 - [API Özeti](#api-özeti)
 - [Mimari Notlar](#mimari-notlar)
@@ -43,7 +44,7 @@
 ### Yönetici tarafı
 
 - Gizli URL ile erişilen admin paneli
-- Maç skoru girişi (grup + eleme)
+- Maç skoru girişi (grup + eleme) ve bahis istatistikleri (korner / sarı kart)
 - Grup puan tablosu yönetimi ve finalize
 - Manuel sıralama (beraberlik durumlarında yukarı/aşağı ok)
 - En iyi 3. takım sıralaması (otomatik hesaplama + manuel düzenleme)
@@ -67,11 +68,12 @@
 
 | Katman | Teknoloji |
 | ------ | --------- |
-| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, PrimeVue |
+| Frontend (tahmin) | Vue 3, TypeScript, Vite, Pinia, Vue Router, PrimeVue |
+| Frontend (bahis) | Vue 3, TypeScript, Vite, Axios (tek sayfa) |
 | Backend | Node.js, Hono, TypeScript |
 | Veritabanı | Supabase (PostgreSQL) |
 | Kimlik doğrulama | JWT + bcrypt, refresh token rotation |
-| Monorepo | npm workspaces (`client`, `server`) |
+| Monorepo | npm workspaces (`client`, `server`, `bet-client`) |
 
 ---
 
@@ -79,13 +81,18 @@
 
 ```text
 world-cup-prediction/
-├── client/                 # Vue 3 SPA
+├── client/                 # Vue 3 SPA (tahmin oyunu)
 │   └── src/
 │       ├── views/          # Sayfa bileşenleri (Home, Leaderboard, Admin, …)
 │       ├── components/     # Ortak bileşenler (dashboard/, TournamentGuide, …)
 │       ├── stores/         # Pinia store’ları
 │       ├── api/            # Axios istemcisi
 │       └── router/         # Vue Router tanımları
+├── bet-client/             # Vue 3 SPA (bahis ilerlemesi — tek sayfa)
+│   └── src/
+│       ├── App.vue         # Korner / sarı kart ilerleme ekranı
+│       ├── api.ts          # GET /bet-progress
+│       └── components/icons/
 ├── server/                 # Hono API sunucusu
 │   └── src/
 │       ├── routes/         # API route’ları
@@ -142,32 +149,34 @@ Detaylar için [Ortam Değişkenleri](#ortam-değişkenleri) bölümüne bakın.
 
 ### 4. Veritabanı migrasyonlarını uygulayın
 
-Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya adı sırasına göre** çalıştırın:
+Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya adı sırasına göre** çalıştırın (001 → 022):
 
 ```text
-001_initial_schema.sql
-002_seed_tiers.sql
-003_seed_scoring_rule_types.sql
-004_seed_tier_scoring_rules.sql
-005_seed_teams.sql
-006_seed_tournament_config.sql
-007_seed_opening_match.sql
-008_seed_group_matches.sql
-009_rename_usa_team.sql
-010_group_manual_rank.sql
-011_best_third_rankings.sql
-012_knockout_bracket_slots.sql
-013_set_team_selections_fn.sql
-014_random_mode.sql
-015_random_mode_reroll_history.sql
-016_random_mode_no_same_group.sql
-017_seed_bronze_medal_scoring.sql
-018_reorder_medal_scoring_rule_ids.sql
-019_fix_advisor_findings.sql
-020_competitions.sql
+20260602155311_001_initial_schema.sql
+20260602155311_002_seed_tiers.sql
+20260602155312_003_seed_scoring_rule_types.sql
+20260602155317_004_seed_tier_scoring_rules.sql
+20260602155321_005_seed_teams.sql
+20260602155322_006_seed_tournament_config.sql
+20260602155444_007_seed_opening_match.sql
+20260604191213_008_seed_group_matches.sql
+20260604192731_009_rename_usa_team.sql
+20260605114110_010_group_manual_rank.sql
+20260605115923_011_best_third_rankings.sql
+20260605125337_012_knockout_bracket_slots.sql
+20260605161216_013_set_team_selections_fn.sql
+20260610143342_014_random_mode.sql
+20260610145828_015_random_mode_reroll_history.sql
+20260610152028_016_random_mode_no_same_group.sql
+20260610153359_017_seed_bronze_medal_scoring.sql
+20260610154256_018_reorder_medal_scoring_rule_ids.sql
+20260610155500_019_fix_advisor_findings.sql
+20260610160000_020_competitions.sql
+20260611120000_021_refresh_token_rotation_grace.sql
+20260612100913_022_bet_progress.sql
 ```
 
-> **Önemli:** Migration dosya adlarındaki zaman damgası gerçek oluşturma anını yansıtmalıdır. Yeni migration eklerken `.cursor/rules/supabase-migrations.mdc` kurallarına uyun.
+> **Önemli:** Migration dosya adlarındaki zaman damgası gerçek oluşturma anını yansıtmalıdır. Yeni migration eklerken `.cursor/rules/supabase-migrations.mdc` kurallarına uyun. Ayrıntılı açıklamalar için [Veritabanı Migrasyonları](#veritabanı-migrasyonları) tablosuna bakın.
 
 ### 5. İlk yönetici kullanıcısını oluşturun
 
@@ -246,6 +255,8 @@ yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 | 018 | `reorder_medal_scoring_rule_ids` | Madalya kural ID'lerini bronz/gümüş/altın sırasına alma |
 | 019 | `fix_advisor_findings`     | Supabase advisor bulguları (SECURITY INVOKER, search_path) |
 | 020 | `competitions`             | Yarışmalar tablosu + `users.competition_id` (oyuncu izolasyonu, yarışma başına rastgele mod) |
+| 021 | `refresh_token_rotation_grace` | Yakın eşzamanlı refresh isteklerinde oturum düşmesini önleyen grace penceresi |
+| 022 | `bet_progress`             | Bahis hedefleri (`bet_progress_config`) ve maç istatistikleri (`match_bet_stats`) |
 
 ---
 
@@ -315,20 +326,32 @@ Aynı turnuvayı birbirinden bağımsız oyuncu gruplarıyla (örn. aile, arkada
 ## Geliştirme
 
 ```bash
-# Her iki workspace’i birlikte başlat
+# Her iki workspace’i birlikte başlat (tahmin oyunu)
 npm run dev
+
+# Bahis ilerlemesi client + backend
+npm run dev:bet
 
 # Yalnızca frontend
 npm run dev:client
 
+# Yalnızca bahis client (backend ayrıca gerekir)
+npm run dev:bet-client
+
 # Yalnızca backend
 npm run dev:server
 
-# Production build
+# Production build (tahmin oyunu)
 npm run build
+
+# Bahis client build (ayrı Netlify deploy)
+npm run build:bet-client
+
+# Hepsi
+npm run build:all
 ```
 
-Vite dev sunucusu `/api` isteklerini `http://localhost:3001` adresine proxy eder.
+Vite dev sunucusu `/api` isteklerini `http://localhost:3001` adresine proxy eder (`client`: 5173, `bet-client`: 5174).
 
 ---
 
@@ -416,15 +439,72 @@ Admin paneline `/{ADMIN_PATH}` adresinden erişilir. Yönetici hesabıyla giriş
 
 | Sekme        | İşlev                                      |
 | ------------ | ------------------------------------------ |
-| Dashboard    | Genel durum özeti                          |
-| Maçlar       | Skor girişi, maç oluşturma/silme           |
-| Gruplar      | Puan tabloları, finalize, manuel sıralama  |
-| En İyi 3.ler | 12→8 sıralaması                            |
-| Kurallar     | Puan kuralı ve tier tabloları              |
-| Ayarlar      | Turnuva config (kilit tarihi, puanlama bayrakları vb.) |
 | Kullanıcılar | Kullanıcı CRUD + yarışma atama             |
 | Yarışmalar   | Yarışma CRUD, yarışma başına rastgele mod aç/kapa, yarışma bazlı liderlik izleme |
+| Kurallar     | Puan kuralı ve tier tabloları              |
+| Ayarlar      | Turnuva config (kilit tarihi, puanlama bayrakları vb.) |
+| Maçlar       | Skor girişi, korner/sarı kart istatistikleri, maç oluşturma/silme |
+| Bahis        | Turnuva geneli korner / sarı kart hedefleri (Üst bahis eşikleri) |
+| Gruplar      | Puan tabloları, finalize, manuel sıralama, en iyi 3.ler (12→8) |
 | Rastgele     | Oyuncuların rastgele seçimleri + kullanıcı bazında sıfırlama |
+
+---
+
+## Bahis ilerlemesi (bet-client)
+
+Tahmin oyunundan bağımsız, turnuva geneli **korner Üst** ve **sarı kart Üst** bahislerinin ilerlemesini gösteren tek sayfalık client. Aynı Supabase veritabanını ve backend API’yi kullanır; katılımcı endpoint’lerine bahis verisi karışmaz.
+
+### Özellikler
+
+- Korner ve sarı kart için ayrı progress bar (hedef aşıldığında %100’de kalır)
+- `spotlightMatch`: canlı maç varsa **Canlı Maç** kartı (`kind: live`), yoksa **Sıradaki Maç** (`kind: scheduled`)
+- Canlı maç kartı: skor + korner/sarı kart (girilmemiş alanlar `0`), elle giriş uyarısı; tarih/saat gösterilmez
+- Sıradaki maç kartı: takımlar + maç tarihi/saati
+- Bitmiş maçlar listesi (skor + takım bazlı istatistikler; girilmemiş alanlar `—`)
+- Oynanan maç sayacı (`biten / 104`; toplam client tarafında hesaplanır)
+- Admin panelinden özelleştirilebilir hedefler (`991` korner, `381` sarı kart varsayılan)
+
+### API yanıtı (`GET /bet-progress`)
+
+Public, auth gerektirmez. Katılımcı endpoint’lerinin camelCase DTO sözleşmesinden bağımsızdır; bahis verisi tahmin oyunu yanıtlarına eklenmez.
+
+| Alan | Açıklama |
+| ---- | -------- |
+| `targets` | Hedef korner / sarı kart toplamları |
+| `totals` | Bitmiş maçlardan toplanan gerçekleşen toplamlar |
+| `progress` | Yüzde ilerleme (0–100, hedef aşımında 100’de kalır) |
+| `spotlightMatch` | Canlı veya sıradaki maç (`kind`, skor, istatistik alanları) |
+| `finishedMatches` | Bitmiş maçlar (yeniden eskiye) |
+
+### Geliştirme
+
+```bash
+npm run dev:bet
+```
+
+- bet-client: <http://localhost:5174>
+- Backend: <http://localhost:3001>
+
+### Production deploy
+
+bet-client ayrı bir Netlify sitesi olarak deploy edilir:
+
+| Ayar | Değer |
+| ---- | ----- |
+| Base directory | `bet-client` |
+| Build command | `npm run build -w bet-client` (repo kökünden) |
+| Publish directory | `dist` |
+
+`bet-client/public/_redirects` dosyası `/api` isteklerini Vercel backend’ine proxy’ler (tahmin client ile aynı pattern). Backend’in de deploy edilmiş olması gerekir.
+
+### Veri modeli
+
+| Tablo | Açıklama |
+| ----- | -------- |
+| `bet_progress_config` | Singleton hedefler (`target_corners`, `target_yellow_cards`) |
+| `match_bet_stats` | Maç başına korner / sarı kart (`matches` ile 1:1, CASCADE delete) |
+
+Skor girişi admin **Maçlar** sekmesindeki dialogdan yapılır; istatistikler `matches` tablosuna eklenmez.
 
 ---
 
@@ -492,6 +572,7 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | ------ | -------------------- | -------------------------------- |
 | GET    | `/health`            | Sağlık kontrolü                  |
 | GET    | `/tournament/status` | Seçim kilidi, turnuva başlangıcı, rastgele mod (çağıranın yarışmasına göre) |
+| GET    | `/bet-progress`        | Bahis ilerlemesi özeti (auth yok; bet-client)                                 |
 
 ### Kimlik doğrulama
 
@@ -529,13 +610,16 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 > UUID/username’ini sızdırmaz**; oyuncu detayına gidiş `username` üzerindendir. `GET /teams`
 > takımları tek kaynak olarak `groups` altında verir (eski tekrar eden düz `teams` dizisi
 > kaldırıldı). Admin endpoint’leri bu sadeleştirmenin dışındadır. Ortak DTO dönüştürücüleri
-> `server/src/lib/serializers.ts` içinde toplanır.
+> `server/src/lib/serializers.ts` içinde toplanır. **`GET /bet-progress` bu kapsam dışındadır**
+> (public bahis özeti; korner/sarı kart verisi katılımcı endpoint’lerinde dönmez).
 
 ### Admin (seçilmiş)
 
 | Method | Endpoint                       | Açıklama                                  |
 | ------ | ------------------------------ | ----------------------------------------- |
-| PUT    | `/matches/:id/result`          | Maç skoru kaydet                          |
+| PUT    | `/matches/:id/result`          | Maç skoru + opsiyonel korner/sarı kart kaydet |
+| GET    | `/bet-progress/config`         | Bahis hedefleri                             |
+| PUT    | `/bet-progress/config`         | Bahis hedeflerini güncelle                  |
 | GET    | `/competitions`                | Yarışmalar + üye sayıları                 |
 | POST   | `/competitions`                | Yarışma oluştur (`key`, `name`, `randomModeEnabled`) |
 | PUT    | `/competitions/:id`            | Yarışma güncelle                          |
@@ -574,6 +658,7 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | `knockout-bracket-service.ts`     | Ağaç oluşturma, Son 32 senkronizasyonu, skor sonrası slot doldurma |
 | `dashboard-service.ts`            | Katılımcı ana sayfa / `GET /me/dashboard` toplu veri               |
 | `tournament-config.ts`            | Seçim kilidi, turnuva başlangıcı                                   |
+| `bet-progress-service.ts`         | Bahis hedefleri, maç istatistikleri, public özet (`GET /bet-progress`) |
 
 ### Güvenlik
 

@@ -33,6 +33,11 @@ import {
   syncKnockoutRoundOf32,
   syncBracketFromMatchResult,
 } from '../services/knockout-bracket-service.js';
+import {
+  getBetProgressConfig,
+  updateBetProgressConfig,
+  upsertMatchBetStats,
+} from '../services/bet-progress-service.js';
 import type { MatchRow, MatchStage } from '../lib/types.js';
 
 const adminRoutes = new Hono<{ Variables: AppVariables }>();
@@ -412,11 +417,40 @@ adminRoutes.get('/teams/eligible', async (c) => {
 adminRoutes.get('/matches', async (c) => {
   const { data, error } = await supabase
     .from('matches')
-    .select('*, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)')
+    .select(
+      '*, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr), match_bet_stats(home_corners, away_corners, home_yellow_cards, away_yellow_cards)',
+    )
     .order('scheduled_at');
 
   if (error) throw error;
   return c.json({ matches: data ?? [] });
+});
+
+adminRoutes.get('/bet-progress/config', async (c) => {
+  const configRow = await getBetProgressConfig();
+  return c.json({
+    targetCorners: configRow.target_corners,
+    targetYellowCards: configRow.target_yellow_cards,
+    updatedAt: configRow.updated_at,
+  });
+});
+
+adminRoutes.put('/bet-progress/config', async (c) => {
+  const schema = z.object({
+    targetCorners: z.number().int().min(1),
+    targetYellowCards: z.number().int().min(1),
+  });
+
+  const body = await c.req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Geçersiz bahis hedefleri' }, 400);
+
+  const configRow = await updateBetProgressConfig(parsed.data);
+  return c.json({
+    targetCorners: configRow.target_corners,
+    targetYellowCards: configRow.target_yellow_cards,
+    updatedAt: configRow.updated_at,
+  });
 });
 
 adminRoutes.post('/matches', async (c) => {
@@ -465,6 +499,10 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     homeScore: z.number().int().min(0),
     awayScore: z.number().int().min(0),
     status: z.enum(['finished', 'live', 'scheduled', 'postponed', 'cancelled']).optional(),
+    homeCorners: z.number().int().min(0).optional(),
+    awayCorners: z.number().int().min(0).optional(),
+    homeYellowCards: z.number().int().min(0).optional(),
+    awayYellowCards: z.number().int().min(0).optional(),
   });
 
   const body = await c.req.json();
@@ -521,7 +559,23 @@ adminRoutes.put('/matches/:id/result', async (c) => {
   await syncBracketFromMatchResult(matchRow);
   const result = await recalculateAllPoints();
 
-  return c.json({ match, recalculated: result });
+  const hasBetStats =
+    parsed.data.homeCorners !== undefined &&
+    parsed.data.awayCorners !== undefined &&
+    parsed.data.homeYellowCards !== undefined &&
+    parsed.data.awayYellowCards !== undefined;
+
+  let betStats = null;
+  if (hasBetStats) {
+    betStats = await upsertMatchBetStats(id, {
+      homeCorners: parsed.data.homeCorners!,
+      awayCorners: parsed.data.awayCorners!,
+      homeYellowCards: parsed.data.homeYellowCards!,
+      awayYellowCards: parsed.data.awayYellowCards!,
+    });
+  }
+
+  return c.json({ match, betStats, recalculated: result });
 });
 
 adminRoutes.delete('/matches/:id', async (c) => {

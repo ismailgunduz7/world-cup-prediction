@@ -1,0 +1,5 @@
+# API'yi aynı origin üzerinden backend'e proxy'le.
+/api/*  https://world-cup-prediction-server.vercel.app/api/:splat  200
+
+# SPA fallback
+/*      /index.html                                                200

@@ -49,7 +49,7 @@ type Competition = {
 
 type TeamOption = { id: number; name_tr: string; group_code: string };
 
-type AdminTab = 'users' | 'competitions' | 'rules' | 'settings' | 'matches' | 'groups' | 'random';
+type AdminTab = 'users' | 'competitions' | 'rules' | 'settings' | 'matches' | 'groups' | 'random' | 'bet';
 
 const adminTabs: Array<{ key: AdminTab; label: string }> = [
   { key: 'users', label: 'Kullanıcılar' },
@@ -57,6 +57,7 @@ const adminTabs: Array<{ key: AdminTab; label: string }> = [
   { key: 'rules', label: 'Kurallar' },
   { key: 'settings', label: 'Ayarlar' },
   { key: 'matches', label: 'Maçlar' },
+  { key: 'bet', label: 'Bahis' },
   { key: 'groups', label: 'Gruplar' },
   { key: 'random', label: 'Rastgele' },
 ];
@@ -250,8 +251,20 @@ const newMatchErrors = ref<ValidationErrors>({});
 
 const scoreDialogVisible = ref(false);
 const scoreMatch = ref<Record<string, unknown> | null>(null);
-const scoreForm = ref({ homeScore: 0, awayScore: 0, status: 'finished' });
+const scoreForm = ref({
+  homeScore: 0,
+  awayScore: 0,
+  status: 'finished',
+  homeCorners: 0,
+  awayCorners: 0,
+  homeYellowCards: 0,
+  awayYellowCards: 0,
+});
 const scoreErrors = ref<ValidationErrors>({});
+
+const betProgressConfig = ref({ targetCorners: 991, targetYellowCards: 381 });
+const savingBetProgress = ref(false);
+const betProgressErrors = ref<ValidationErrors>({});
 
 const stageOptions = [
   { label: 'Grup Aşaması', value: 'group' },
@@ -448,6 +461,55 @@ async function loadDashboard() {
 
   if (newMatch.value.stage && newMatch.value.stage !== 'group') {
     await loadEligibleTeams(newMatch.value.stage);
+  }
+
+  await loadBetProgressConfig();
+}
+
+async function loadBetProgressConfig() {
+  const { data } = await api.get(`/admin/${ADMIN_PATH}/bet-progress/config`);
+  betProgressConfig.value = {
+    targetCorners: data.targetCorners,
+    targetYellowCards: data.targetYellowCards,
+  };
+}
+
+function matchBetStatsRow(match: Record<string, unknown>): Record<string, unknown> | null {
+  const raw = match.match_bet_stats;
+  if (!raw) return null;
+  if (Array.isArray(raw)) return (raw[0] as Record<string, unknown>) ?? null;
+  return raw as Record<string, unknown>;
+}
+
+function validateBetProgressConfig(): boolean {
+  const errors: ValidationErrors = {};
+
+  const cornersReq = requiredNumber(betProgressConfig.value.targetCorners, 'Hedef korner');
+  if (cornersReq) errors.targetCorners = cornersReq;
+  else if (betProgressConfig.value.targetCorners < 1) errors.targetCorners = 'En az 1 olmalı';
+
+  const cardsReq = requiredNumber(betProgressConfig.value.targetYellowCards, 'Hedef sarı kart');
+  if (cardsReq) errors.targetYellowCards = cardsReq;
+  else if (betProgressConfig.value.targetYellowCards < 1) errors.targetYellowCards = 'En az 1 olmalı';
+
+  betProgressErrors.value = errors;
+  return !hasErrors(errors);
+}
+
+async function saveBetProgressConfig() {
+  if (!validateBetProgressConfig()) return;
+
+  savingBetProgress.value = true;
+  try {
+    await api.put(`/admin/${ADMIN_PATH}/bet-progress/config`, {
+      targetCorners: betProgressConfig.value.targetCorners,
+      targetYellowCards: betProgressConfig.value.targetYellowCards,
+    });
+    toast.add({ severity: 'success', summary: 'Bahis hedefleri kaydedildi', life: 3000 });
+  } catch (err: unknown) {
+    toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Kaydedilemedi'), life: 4000 });
+  } finally {
+    savingBetProgress.value = false;
   }
 }
 
@@ -661,10 +723,15 @@ async function createMatch() {
 
 function openScoreDialog(match: Record<string, unknown>) {
   scoreMatch.value = match;
+  const stats = matchBetStatsRow(match);
   scoreForm.value = {
     homeScore: (match.home_score as number) ?? 0,
     awayScore: (match.away_score as number) ?? 0,
     status: (match.status as string) ?? 'finished',
+    homeCorners: (stats?.home_corners as number) ?? 0,
+    awayCorners: (stats?.away_corners as number) ?? 0,
+    homeYellowCards: (stats?.home_yellow_cards as number) ?? 0,
+    awayYellowCards: (stats?.away_yellow_cards as number) ?? 0,
   };
   scoreErrors.value = {};
   scoreDialogVisible.value = true;
@@ -681,6 +748,22 @@ function validateScore(): boolean {
   if (awayReq) errors.awayScore = awayReq;
   else if (scoreForm.value.awayScore < 0) errors.awayScore = 'Skor negatif olamaz';
 
+  const homeCornersReq = requiredNumber(scoreForm.value.homeCorners, 'Ev sahibi korner');
+  if (homeCornersReq) errors.homeCorners = homeCornersReq;
+  else if (scoreForm.value.homeCorners < 0) errors.homeCorners = 'Korner negatif olamaz';
+
+  const awayCornersReq = requiredNumber(scoreForm.value.awayCorners, 'Deplasman korner');
+  if (awayCornersReq) errors.awayCorners = awayCornersReq;
+  else if (scoreForm.value.awayCorners < 0) errors.awayCorners = 'Korner negatif olamaz';
+
+  const homeCardsReq = requiredNumber(scoreForm.value.homeYellowCards, 'Ev sahibi sarı kart');
+  if (homeCardsReq) errors.homeYellowCards = homeCardsReq;
+  else if (scoreForm.value.homeYellowCards < 0) errors.homeYellowCards = 'Sarı kart negatif olamaz';
+
+  const awayCardsReq = requiredNumber(scoreForm.value.awayYellowCards, 'Deplasman sarı kart');
+  if (awayCardsReq) errors.awayYellowCards = awayCardsReq;
+  else if (scoreForm.value.awayYellowCards < 0) errors.awayYellowCards = 'Sarı kart negatif olamaz';
+
   scoreErrors.value = errors;
   return !hasErrors(errors);
 }
@@ -693,6 +776,10 @@ async function saveScore() {
       homeScore: scoreForm.value.homeScore,
       awayScore: scoreForm.value.awayScore,
       status: scoreForm.value.status,
+      homeCorners: scoreForm.value.homeCorners,
+      awayCorners: scoreForm.value.awayCorners,
+      homeYellowCards: scoreForm.value.homeYellowCards,
+      awayYellowCards: scoreForm.value.awayYellowCards,
     });
     toast.add({ severity: 'success', summary: 'Skor güncellendi', life: 3000 });
     scoreDialogVisible.value = false;
@@ -1921,6 +2008,41 @@ function isSelf(userId: string) {
         </DataTable>
         </div>
 
+        <div v-show="activeTab === 'bet'" class="admin-tab-panel settings-panel" role="tabpanel">
+          <section class="settings-section">
+            <h3 class="section-title">Bahis hedefleri</h3>
+            <Message severity="info" :closable="false">
+              Turnuva geneli korner ve sarı kart Üst bahisleri için gereken minimum toplamları belirleyin.
+            </Message>
+            <div class="form-field">
+              <label for="bet-target-corners">Hedef korner (toplam)</label>
+              <InputNumber
+                input-id="bet-target-corners"
+                v-model="betProgressConfig.targetCorners"
+                :min="1"
+                class="w-full"
+              />
+              <FormFieldError :message="pickError(betProgressErrors, 'targetCorners')" />
+            </div>
+            <div class="form-field">
+              <label for="bet-target-yellow-cards">Hedef sarı kart (toplam)</label>
+              <InputNumber
+                input-id="bet-target-yellow-cards"
+                v-model="betProgressConfig.targetYellowCards"
+                :min="1"
+                class="w-full"
+              />
+              <FormFieldError :message="pickError(betProgressErrors, 'targetYellowCards')" />
+            </div>
+            <Button
+              label="Kaydet"
+              icon="pi pi-check"
+              :loading="savingBetProgress"
+              @click="saveBetProgressConfig"
+            />
+          </section>
+        </div>
+
         <div v-show="activeTab === 'groups'" class="admin-tab-panel groups-panel" role="tabpanel">
           <Message severity="info" :closable="false" class="mb-2">
             Eşit takımlarda oklarla sıralamayı düzenleyip <strong>Sıralamayı kaydet</strong> yeterli (bonus puanlar hemen güncellenir).
@@ -2363,7 +2485,7 @@ function isSelf(userId: string) {
       </div>
     </Dialog>
 
-    <Dialog v-model:visible="scoreDialogVisible" header="Skor Güncelle" modal :style="{ width: 'min(24rem, 92vw)' }">
+    <Dialog v-model:visible="scoreDialogVisible" header="Skor Güncelle" modal :style="{ width: 'min(28rem, 92vw)' }">
       <div v-if="scoreMatch" class="dialog-form">
         <p class="dialog-match-title">
           {{ teamName(scoreMatch.home_team as Record<string, unknown>) }} vs
@@ -2382,6 +2504,27 @@ function isSelf(userId: string) {
         <div class="form-field">
           <label>Durum</label>
           <Select v-model="scoreForm.status" :options="statusOptions" option-label="label" option-value="value" class="w-full" />
+        </div>
+        <p class="dialog-section-label">Bahis istatistikleri</p>
+        <div class="form-field">
+          <label>Ev sahibi korner</label>
+          <InputNumber v-model="scoreForm.homeCorners" :min="0" class="w-full" />
+          <FormFieldError :message="pickError(scoreErrors, 'homeCorners')" />
+        </div>
+        <div class="form-field">
+          <label>Deplasman korner</label>
+          <InputNumber v-model="scoreForm.awayCorners" :min="0" class="w-full" />
+          <FormFieldError :message="pickError(scoreErrors, 'awayCorners')" />
+        </div>
+        <div class="form-field">
+          <label>Ev sahibi sarı kart</label>
+          <InputNumber v-model="scoreForm.homeYellowCards" :min="0" class="w-full" />
+          <FormFieldError :message="pickError(scoreErrors, 'homeYellowCards')" />
+        </div>
+        <div class="form-field">
+          <label>Deplasman sarı kart</label>
+          <InputNumber v-model="scoreForm.awayYellowCards" :min="0" class="w-full" />
+          <FormFieldError :message="pickError(scoreErrors, 'awayYellowCards')" />
         </div>
       </div>
       <template #footer>
@@ -2638,6 +2781,13 @@ function isSelf(userId: string) {
 .dialog-match-title {
   margin: 0;
   font-weight: 600;
+}
+
+.dialog-section-label {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--p-text-muted-color);
 }
 
 .groups-toolbar {
