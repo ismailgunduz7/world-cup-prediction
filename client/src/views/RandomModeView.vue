@@ -333,7 +333,18 @@ const slotNumbers = [1, 2, 3];
                 class="rm-slot-card"
                 :class="{ 'is-spinning': spinningSlots.has(slot) }"
               >
-                <strong class="rm-slot-name">{{ display[slot] ?? '—' }}</strong>
+                <RouterLink
+                  v-if="teamForSlot(slot) && !spinningSlots.has(slot)"
+                  :to="{
+                    name: 'team-matches',
+                    params: { id: teamForSlot(slot)!.id },
+                    query: { from: 'random-mode' },
+                  }"
+                  class="rm-slot-name rm-slot-name-link"
+                >
+                  {{ display[slot] ?? '—' }}
+                </RouterLink>
+                <strong v-else class="rm-slot-name">{{ display[slot] ?? '—' }}</strong>
                 <div
                   v-if="teamForSlot(slot) && !spinningSlots.has(slot)"
                   class="rm-slot-tags"
@@ -552,6 +563,16 @@ const slotNumbers = [1, 2, 3];
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.rm-slot-name-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rm-slot-name-link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
 }
 
 .rm-slot-card.is-spinning .rm-slot-name {
