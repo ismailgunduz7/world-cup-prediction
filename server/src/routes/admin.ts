@@ -38,7 +38,12 @@ import {
   updateBetProgressConfig,
   upsertMatchBetStats,
 } from '../services/bet-progress-service.js';
-import { matchUpdateAffectsScoring } from '../services/match-update-utils.js';
+import {
+  findConflictingLiveMatch,
+  isSingleLiveMatchViolation,
+  matchUpdateAffectsScoring,
+  SINGLE_LIVE_MATCH_ERROR,
+} from '../services/match-update-utils.js';
 import type { MatchRow, MatchStage } from '../lib/types.js';
 
 const adminRoutes = new Hono<{ Variables: AppVariables }>();
@@ -529,6 +534,14 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     return c.json({ error: 'Eleme maçlarında beraberlik olamaz' }, 400);
   }
 
+  const finalStatus = parsed.data.status ?? 'finished';
+  if (finalStatus === 'live') {
+    const conflictingLiveMatch = await findConflictingLiveMatch(supabase, id);
+    if (conflictingLiveMatch) {
+      return c.json({ error: SINGLE_LIVE_MATCH_ERROR }, 400);
+    }
+  }
+
   const winner =
     parsed.data.homeScore > parsed.data.awayScore
       ? existing.home_team_id
@@ -542,14 +555,19 @@ adminRoutes.put('/matches/:id/result', async (c) => {
       home_score: parsed.data.homeScore,
       away_score: parsed.data.awayScore,
       winner_team_id: winner,
-      status: parsed.data.status ?? 'finished',
+      status: finalStatus,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (isSingleLiveMatchViolation(error, { settingLive: finalStatus === 'live' })) {
+      return c.json({ error: SINGLE_LIVE_MATCH_ERROR }, 400);
+    }
+    throw error;
+  }
 
   const matchRow = match as MatchRow;
   const needsScoringPipeline = matchUpdateAffectsScoring(existing as MatchRow, parsed.data);
