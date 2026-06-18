@@ -221,7 +221,7 @@ function formatLockDate(iso: string | null) {
 
         <div class="dashboard-grid">
           <UpcomingStrip :matches="dashboard.upcoming" />
-          <MiniLeaderboard :entries="dashboard.miniLeaderboard" />
+          <MiniLeaderboard :entries="dashboard.miniLeaderboard" :player-count="dashboard.me.playerCount" />
         </div>
 
         <RecentActivity :activities="dashboard.recentActivity" />

@@ -47,12 +47,17 @@ export type DashboardUpcoming = {
   stageLabel: string;
 };
 
-export type DashboardMiniLeaderboardEntry = {
-  rank: number;
-  displayName: string;
-  totalScore: number;
-  isCurrentUser: boolean;
-};
+export type DashboardMiniLeaderboardEntry =
+  | {
+      isGap?: false;
+      rank: number;
+      displayName: string;
+      totalScore: number;
+      isCurrentUser: boolean;
+    }
+  | {
+      isGap: true;
+    };
 
 export type DashboardActivity = {
   matchId: number;

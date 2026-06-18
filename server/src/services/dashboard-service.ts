@@ -116,10 +116,36 @@ async function buildLeaderboardEntries(competitionId: string | null) {
   return entries.map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
+type MiniLeaderboardEntry =
+  | {
+      isGap?: false;
+      rank: number;
+      displayName: string;
+      totalScore: number;
+      isCurrentUser: boolean;
+    }
+  | { isGap: true };
+
+function toPlayerEntry(
+  entry: { userId: string; displayName: string; totalScore: number; rank: number },
+  userId: string,
+): MiniLeaderboardEntry {
+  return {
+    rank: entry.rank,
+    displayName: entry.displayName,
+    totalScore: entry.totalScore,
+    isCurrentUser: entry.userId === userId,
+  };
+}
+
 function buildMiniLeaderboard(
   entries: Array<{ userId: string; displayName: string; totalScore: number; rank: number }>,
   userId: string,
-) {
+): MiniLeaderboardEntry[] {
+  if (entries.length <= 10) {
+    return entries.map((entry) => toPlayerEntry(entry, userId));
+  }
+
   const myIndex = entries.findIndex((e) => e.userId === userId);
   const indices = new Set<number>();
 
@@ -133,14 +159,19 @@ function buildMiniLeaderboard(
     if (myIndex < entries.length - 1) indices.add(myIndex + 1);
   }
 
-  return [...indices]
-    .sort((a, b) => a - b)
-    .map((i) => ({
-      rank: entries[i].rank,
-      displayName: entries[i].displayName,
-      totalScore: entries[i].totalScore,
-      isCurrentUser: entries[i].userId === userId,
-    }));
+  const sortedIndices = [...indices].sort((a, b) => a - b);
+  const result: MiniLeaderboardEntry[] = [];
+
+  for (let j = 0; j < sortedIndices.length; j++) {
+    const i = sortedIndices[j];
+    const prev = sortedIndices[j - 1];
+    if (j > 0 && i - prev > 1) {
+      result.push({ isGap: true });
+    }
+    result.push(toPlayerEntry(entries[i], userId));
+  }
+
+  return result;
 }
 
 function buildMinimalTeams(

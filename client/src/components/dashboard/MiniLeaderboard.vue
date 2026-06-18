@@ -1,12 +1,23 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Card from 'primevue/card';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import type { DashboardMiniLeaderboardEntry } from '@/types/dashboard';
 
-defineProps<{
+const props = defineProps<{
   entries: DashboardMiniLeaderboardEntry[];
+  playerCount: number;
 }>();
+
+const linkLabel = computed(() => (props.playerCount <= 10 ? 'Detaylar' : 'Tümünü gör'));
+
+const rows = computed(() =>
+  props.entries.map((entry, index) => ({
+    ...entry,
+    rowKey: entry.isGap ? `gap-${index}` : `player-${entry.rank}`,
+  })),
+);
 </script>
 
 <template>
@@ -14,23 +25,28 @@ defineProps<{
     <template #title>
       <div class="mini-leaderboard-header">
         <span>Lider tablosu</span>
-        <RouterLink to="/puan-durumu" class="mini-leaderboard-link">Tümünü gör</RouterLink>
+        <RouterLink to="/puan-durumu" class="mini-leaderboard-link">{{ linkLabel }}</RouterLink>
       </div>
     </template>
     <template #content>
       <div class="table-scroll">
-        <DataTable :value="entries" size="small">
+        <DataTable :value="rows" size="small" data-key="rowKey">
           <Column header="#" style="width: 2.5rem">
-            <template #body="{ data }">{{ data.rank }}</template>
+            <template #body="{ data }">
+              <span v-if="data.isGap" class="mini-leaderboard-gap">…</span>
+              <template v-else>{{ data.rank }}</template>
+            </template>
           </Column>
           <Column field="displayName" header="Oyuncu">
             <template #body="{ data }">
-              <span :class="{ 'is-current-user': data.isCurrentUser }">{{ data.displayName }}</span>
+              <span v-if="data.isGap" class="mini-leaderboard-gap">…</span>
+              <span v-else :class="{ 'is-current-user': data.isCurrentUser }">{{ data.displayName }}</span>
             </template>
           </Column>
           <Column field="totalScore" header="Puan" style="width: 5rem">
             <template #body="{ data }">
-              <strong>{{ data.totalScore }}</strong>
+              <span v-if="data.isGap" class="mini-leaderboard-gap">…</span>
+              <strong v-else>{{ data.totalScore }}</strong>
             </template>
           </Column>
         </DataTable>
@@ -70,5 +86,10 @@ defineProps<{
 .is-current-user {
   font-weight: 700;
   color: var(--color-primary-hover);
+}
+
+.mini-leaderboard-gap {
+  color: var(--p-text-muted-color);
+  letter-spacing: 0.15em;
 }
 </style>
