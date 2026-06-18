@@ -17,6 +17,7 @@ import TabBar from '@/components/TabBar.vue';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import api, { ADMIN_PATH } from '@/api/client';
+import { formatMatchScore } from '@/utils/match-score';
 import { useAuthStore } from '@/stores/auth';
 import FormFieldError from '@/components/FormFieldError.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -166,7 +167,10 @@ const editUser = ref({
 });
 const editUserErrors = ref<ValidationErrors>({});
 
-const scoringFlags = ref({ group_stage_counts_as_round_advancement: false });
+const scoringFlags = ref({
+  group_stage_counts_as_round_advancement: false,
+  knockout_result_over_120: false,
+});
 
 // --- Competitions ---
 const competitions = ref<Competition[]>([]);
@@ -254,6 +258,10 @@ const scoreMatch = ref<Record<string, unknown> | null>(null);
 const scoreForm = ref({
   homeScore: 0,
   awayScore: 0,
+  homeScoreAet: 0,
+  awayScoreAet: 0,
+  homePenalties: 0,
+  awayPenalties: 0,
   status: 'finished',
   homeCorners: 0,
   awayCorners: 0,
@@ -261,6 +269,21 @@ const scoreForm = ref({
   awayYellowCards: 0,
 });
 const scoreErrors = ref<ValidationErrors>({});
+
+// Eleme maçında 90' beraberse uzatma; uzatma da beraberse penaltı sonucu girilir.
+const isKnockoutScoreMatch = computed(() => {
+  const stage = scoreMatch.value?.stage as string | undefined;
+  return !!stage && stage !== 'group';
+});
+const needsTiebreaker = computed(
+  () =>
+    isKnockoutScoreMatch.value &&
+    scoreForm.value.status === 'finished' &&
+    scoreForm.value.homeScore === scoreForm.value.awayScore,
+);
+const needsPenalties = computed(
+  () => needsTiebreaker.value && scoreForm.value.homeScoreAet === scoreForm.value.awayScoreAet,
+);
 
 const betProgressConfig = ref({ targetCorners: 991, targetYellowCards: 381 });
 const savingBetProgress = ref(false);
@@ -446,7 +469,9 @@ async function loadDashboard() {
   competitions.value = data.competitions ?? [];
 
   const flags = data.config.find((c: { key: string }) => c.key === 'scoring_flags');
-  if (flags) scoringFlags.value = flags.value as typeof scoringFlags.value;
+  if (flags) {
+    scoringFlags.value = { ...scoringFlags.value, ...(flags.value as typeof scoringFlags.value) };
+  }
   applySelectionLockConfig(data.config);
 
   const [{ data: matchData }, { data: teamData }] = await Promise.all([
@@ -479,6 +504,18 @@ function matchBetStatsRow(match: Record<string, unknown>): Record<string, unknow
   if (!raw) return null;
   if (Array.isArray(raw)) return (raw[0] as Record<string, unknown>) ?? null;
   return raw as Record<string, unknown>;
+}
+
+function adminMatchScore(data: Record<string, unknown>): string {
+  if (data.home_score == null || data.away_score == null) return '-';
+  return formatMatchScore({
+    homeScore: data.home_score as number,
+    awayScore: data.away_score as number,
+    homeScoreAet: (data.home_score_aet as number | null) ?? null,
+    awayScoreAet: (data.away_score_aet as number | null) ?? null,
+    homePenalties: (data.home_penalties as number | null) ?? null,
+    awayPenalties: (data.away_penalties as number | null) ?? null,
+  });
 }
 
 function validateBetProgressConfig(): boolean {
@@ -727,6 +764,10 @@ function openScoreDialog(match: Record<string, unknown>) {
   scoreForm.value = {
     homeScore: (match.home_score as number) ?? 0,
     awayScore: (match.away_score as number) ?? 0,
+    homeScoreAet: (match.home_score_aet as number) ?? 0,
+    awayScoreAet: (match.away_score_aet as number) ?? 0,
+    homePenalties: (match.home_penalties as number) ?? 0,
+    awayPenalties: (match.away_penalties as number) ?? 0,
     status: (match.status as string) ?? 'finished',
     homeCorners: (stats?.home_corners as number) ?? 0,
     awayCorners: (stats?.away_corners as number) ?? 0,
@@ -764,6 +805,18 @@ function validateScore(): boolean {
   if (awayCardsReq) errors.awayYellowCards = awayCardsReq;
   else if (scoreForm.value.awayYellowCards < 0) errors.awayYellowCards = 'Sarı kart negatif olamaz';
 
+  // Eleme maçı 90' beraberlik çözümlemesi (sunucu kurallarını yansıtır).
+  if (needsTiebreaker.value) {
+    if (needsPenalties.value) {
+      if (scoreForm.value.homePenalties === scoreForm.value.awayPenalties) {
+        errors.homePenalties = 'Penaltı sonucu eşit olamaz';
+      }
+    } else if (scoreForm.value.homeScoreAet === scoreForm.value.awayScoreAet) {
+      // needsPenalties false iken bu duruma düşülmez; güvenlik için tutuldu.
+      errors.homeScoreAet = 'Uzatma berabere bittiyse penaltı sonucu girilmeli';
+    }
+  }
+
   scoreErrors.value = errors;
   return !hasErrors(errors);
 }
@@ -772,9 +825,15 @@ async function saveScore() {
   if (!scoreMatch.value || !validateScore()) return;
 
   try {
+    const tie = needsTiebreaker.value;
+    const pens = needsPenalties.value;
     const { data } = await api.put(`/admin/${ADMIN_PATH}/matches/${scoreMatch.value.id}/result`, {
       homeScore: scoreForm.value.homeScore,
       awayScore: scoreForm.value.awayScore,
+      homeScoreAet: tie ? scoreForm.value.homeScoreAet : null,
+      awayScoreAet: tie ? scoreForm.value.awayScoreAet : null,
+      homePenalties: tie && pens ? scoreForm.value.homePenalties : null,
+      awayPenalties: tie && pens ? scoreForm.value.awayPenalties : null,
       status: scoreForm.value.status,
       homeCorners: scoreForm.value.homeCorners,
       awayCorners: scoreForm.value.awayCorners,
@@ -1897,6 +1956,12 @@ function isSelf(userId: string) {
             <ToggleSwitch v-model="scoringFlags.group_stage_counts_as_round_advancement" input-id="group-stage-advance" />
             <label for="group-stage-advance">Grup aşaması tur atlama puanına dahil</label>
           </div>
+          <div class="settings-control">
+            <ToggleSwitch v-model="scoringFlags.knockout_result_over_120" input-id="knockout-over-120" />
+            <label for="knockout-over-120">
+              Eleme sonuçlarını 120 dakika üzerinden hesapla (uzatmada kazanan galibiyet alır)
+            </label>
+          </div>
           <Button label="Kaydet" icon="pi pi-check" @click="saveScoringFlags" />
         </section>
 
@@ -2011,7 +2076,7 @@ function isSelf(userId: string) {
           <Column field="status" header="Durum" />
           <Column header="Skor">
             <template #body="{ data }">
-              {{ data.home_score ?? '-' }} - {{ data.away_score ?? '-' }}
+              {{ adminMatchScore(data) }}
             </template>
           </Column>
           <Column header="İşlemler" style="width: 8rem">
@@ -2516,6 +2581,35 @@ function isSelf(userId: string) {
           <InputNumber v-model="scoreForm.awayScore" :min="0" class="w-full" />
           <FormFieldError :message="pickError(scoreErrors, 'awayScore')" />
         </div>
+        <template v-if="needsTiebreaker">
+          <p class="dialog-section-label">Uzatma / Penaltı</p>
+          <Message severity="info" :closable="false" class="tiebreaker-hint">
+            90 dakika berabere. Normal süre/gol puanları 90' skoru üzerinden hesaplanır; uzatma
+            sonu (120') skorunu girin. Uzatma da beraberse penaltı sonucu da gerekir.
+          </Message>
+          <div class="form-field">
+            <label>Ev sahibi uzatma sonu skoru (120')</label>
+            <InputNumber v-model="scoreForm.homeScoreAet" :min="0" class="w-full" />
+            <FormFieldError :message="pickError(scoreErrors, 'homeScoreAet')" />
+          </div>
+          <div class="form-field">
+            <label>Deplasman uzatma sonu skoru (120')</label>
+            <InputNumber v-model="scoreForm.awayScoreAet" :min="0" class="w-full" />
+            <FormFieldError :message="pickError(scoreErrors, 'awayScoreAet')" />
+          </div>
+          <template v-if="needsPenalties">
+            <div class="form-field">
+              <label>Ev sahibi penaltı</label>
+              <InputNumber v-model="scoreForm.homePenalties" :min="0" class="w-full" />
+              <FormFieldError :message="pickError(scoreErrors, 'homePenalties')" />
+            </div>
+            <div class="form-field">
+              <label>Deplasman penaltı</label>
+              <InputNumber v-model="scoreForm.awayPenalties" :min="0" class="w-full" />
+              <FormFieldError :message="pickError(scoreErrors, 'awayPenalties')" />
+            </div>
+          </template>
+        </template>
         <div class="form-field">
           <label>Durum</label>
           <Select v-model="scoreForm.status" :options="statusOptions" option-label="label" option-value="value" class="w-full" />

@@ -11,6 +11,10 @@ type LiveMatchCandidate = Pick<MatchRow, 'id' | 'stage' | 'group_code' | 'round_
 type MatchUpdateInput = {
   homeScore: number;
   awayScore: number;
+  homeScoreAet?: number | null;
+  awayScoreAet?: number | null;
+  homePenalties?: number | null;
+  awayPenalties?: number | null;
   status?: string;
 };
 
@@ -78,14 +82,30 @@ export async function findLiveMatchConstraintError(
 }
 
 export function matchUpdateAffectsScoring(
-  existing: Pick<MatchRow, 'home_score' | 'away_score' | 'status'>,
+  existing: Pick<
+    MatchRow,
+    | 'home_score'
+    | 'away_score'
+    | 'home_score_aet'
+    | 'away_score_aet'
+    | 'home_penalties'
+    | 'away_penalties'
+    | 'status'
+  >,
   update: MatchUpdateInput,
 ): boolean {
   const finalStatus = update.status ?? 'finished';
   const wasFinished = existing.status === 'finished';
   const isFinished = finalStatus === 'finished';
+  // 90' skoru aynı kalsa bile uzatma/penaltı sonucu (dolayısıyla kazanan ve ayar
+  // aktifken gol/sonuç puanı) değişebilir; bu yüzden ET/penaltı alanlarını da karşılaştır.
   const scoreChanged =
-    existing.home_score !== update.homeScore || existing.away_score !== update.awayScore;
+    existing.home_score !== update.homeScore ||
+    existing.away_score !== update.awayScore ||
+    existing.home_score_aet !== (update.homeScoreAet ?? null) ||
+    existing.away_score_aet !== (update.awayScoreAet ?? null) ||
+    existing.home_penalties !== (update.homePenalties ?? null) ||
+    existing.away_penalties !== (update.awayPenalties ?? null);
   const statusChanged = existing.status !== finalStatus;
   return (wasFinished || isFinished) && (scoreChanged || statusChanged);
 }

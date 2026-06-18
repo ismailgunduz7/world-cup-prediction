@@ -55,6 +55,10 @@ export type MatchRow = {
   status: MatchStatus;
   home_score: number | null;
   away_score: number | null;
+  home_score_aet: number | null;
+  away_score_aet: number | null;
+  home_penalties: number | null;
+  away_penalties: number | null;
   winner_team_id: number | null;
   bracket_match_number: number | null;
   home_slot: string | null;

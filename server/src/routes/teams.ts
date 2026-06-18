@@ -87,7 +87,7 @@ teamRoutes.get('/:id/matches', participantMiddleware, async (c) => {
   const { data: matches, error } = await supabase
     .from('matches')
     .select(
-      'id, stage, status, scheduled_at, home_score, away_score, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
+      'id, stage, status, scheduled_at, home_score, away_score, home_score_aet, away_score_aet, home_penalties, away_penalties, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
     )
     .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
     .order('scheduled_at');

@@ -7,6 +7,7 @@ import LoadingState from '@/components/LoadingState.vue';
 import TabBar from '@/components/TabBar.vue';
 import api from '@/api/client';
 import { isGroupFinalMatch } from '@/utils/match-round';
+import { formatMatchScore } from '@/utils/match-score';
 
 type FixtureTeam = { id: number | null; name: string };
 
@@ -22,6 +23,11 @@ type FixtureMatch = {
   awayTeam: FixtureTeam;
   homeScore: number | null;
   awayScore: number | null;
+  homeScoreAet: number | null;
+  awayScoreAet: number | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
+  winnerTeamId: number | null;
 };
 
 type FixtureFilter = 'planned' | 'finished';
@@ -133,8 +139,7 @@ function formatDateLong(iso: string) {
 }
 
 function formatScore(match: FixtureMatch) {
-  if (match.homeScore === null || match.awayScore === null) return '– : –';
-  return `${match.homeScore} - ${match.awayScore}`;
+  return formatMatchScore(match);
 }
 
 function matchContext(match: FixtureMatch) {
@@ -145,6 +150,12 @@ function matchContext(match: FixtureMatch) {
 
 function winnerSide(match: FixtureMatch): 'home' | 'away' | null {
   if (match.homeScore === null || match.awayScore === null) return null;
+  // Uzatma/penaltı ile karara bağlanan maçlarda kazanan winnerTeamId'den belirlenir
+  // (90' skoru beraberlik olabilir).
+  if (match.winnerTeamId != null) {
+    if (match.winnerTeamId === match.homeTeam.id) return 'home';
+    if (match.winnerTeamId === match.awayTeam.id) return 'away';
+  }
   const home = Number(match.homeScore);
   const away = Number(match.awayScore);
   if (Number.isNaN(home) || Number.isNaN(away)) return null;

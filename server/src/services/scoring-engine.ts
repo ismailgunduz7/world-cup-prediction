@@ -1,6 +1,7 @@
 import { supabase } from '../lib/config.js';
 import { clearBestThirdRankings } from './best-third-service.js';
 import { getConfigValue } from './tournament-config.js';
+import { pointsBasisScore } from '../lib/match-basis.js';
 import { STAGE_LABELS } from '../lib/stage-labels.js';
 import type { MatchRow, MatchStage, ScoringRuleTypeRow, TeamRow, TierScoringRuleRow } from '../lib/types.js';
 
@@ -68,11 +69,13 @@ async function buildMatchPointEntries(
   awayTeam: TeamRow,
   ruleTypes: ScoringRuleTypeRow[],
   ruleMap: RuleMap,
+  knockoutResultOver120: boolean,
 ) {
-  if (match.home_score === null || match.away_score === null) return [];
+  // Puan esası skoru (ayar açıkken uzatma maçlarında 120', aksi halde 90'). G/B/M
+  // ve atılan/yenilen gol bu esas skor üzerinden; kazanan/tur atlama bundan bağımsız.
+  const { home: homeScore, away: awayScore } = pointsBasisScore(match, knockoutResultOver120);
 
-  const homeScore = match.home_score;
-  const awayScore = match.away_score;
+  if (homeScore === null || awayScore === null) return [];
   const entries: Array<{
     team_id: number;
     rule_type_id: number;
@@ -348,10 +351,13 @@ async function buildMedalEntries(ruleTypes: ScoringRuleTypeRow[], ruleMap: RuleM
 
 export async function recalculateAllPoints(): Promise<{ entriesCount: number }> {
   const { ruleTypes, ruleMap } = await loadActiveRules();
-  const scoringFlags = await getConfigValue<{ group_stage_counts_as_round_advancement: boolean }>(
-    'scoring_flags',
-    { group_stage_counts_as_round_advancement: false },
-  );
+  const scoringFlags = await getConfigValue<{
+    group_stage_counts_as_round_advancement: boolean;
+    knockout_result_over_120?: boolean;
+  }>('scoring_flags', {
+    group_stage_counts_as_round_advancement: false,
+    knockout_result_over_120: false,
+  });
 
   const { data: finishedMatches, error: matchError } = await supabase
     .from('matches')
@@ -385,6 +391,7 @@ export async function recalculateAllPoints(): Promise<{ entriesCount: number }> 
       awayTeam,
       ruleTypes,
       ruleMap,
+      scoringFlags.knockout_result_over_120 ?? false,
     );
     allEntries.push(...matchEntries);
   }

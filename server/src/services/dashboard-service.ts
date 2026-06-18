@@ -1,10 +1,12 @@
 import { supabase } from '../lib/config.js';
 import { getStageLabel } from '../lib/stage-labels.js';
+import { pointsBasisScore } from '../lib/match-basis.js';
 import type { MatchStage } from '../lib/types.js';
 import { getTeamQualificationMap, qualificationLabel } from './best-third-service.js';
 import { getGroupStandingsSummaries } from './group-standings-service.js';
 import {
   areSelectionsLocked,
+  getConfigValue,
   getSelectionLockAt,
   getTournamentStartAt,
   hasTournamentStarted,
@@ -19,6 +21,10 @@ type MatchWithTeams = {
   away_team_id: number | null;
   home_score: number | null;
   away_score: number | null;
+  home_score_aet: number | null;
+  away_score_aet: number | null;
+  home_penalties: number | null;
+  away_penalties: number | null;
   home_team: { id: number; name_tr: string } | null;
   away_team: { id: number; name_tr: string } | null;
 };
@@ -50,16 +56,30 @@ function opponentForTeam(match: MatchWithTeams, teamId: number): string {
 function scoreForTeam(match: MatchWithTeams, teamId: number): string | null {
   if (match.home_score === null || match.away_score === null) return null;
   const isHome = match.home_team_id === teamId;
-  const mine = isHome ? match.home_score : match.away_score;
-  const theirs = isHome ? match.away_score : match.home_score;
-  return `${mine}-${theirs}`;
+  const pick = (home: number, away: number) => (isHome ? `${home}-${away}` : `${away}-${home}`);
+
+  // Gerçek skor + etiket: uzatmaya gidildiyse sahadaki skor uzatma sonu skorudur.
+  if (match.home_score_aet !== null && match.away_score_aet !== null) {
+    let label = `${pick(match.home_score_aet, match.away_score_aet)} (uzt.)`;
+    if (match.home_penalties !== null && match.away_penalties !== null) {
+      label += `, pen ${pick(match.home_penalties, match.away_penalties)}`;
+    }
+    return label;
+  }
+  return pick(match.home_score, match.away_score);
 }
 
-function resultForTeam(match: MatchWithTeams, teamId: number): 'win' | 'draw' | 'loss' | null {
-  if (match.home_score === null || match.away_score === null) return null;
+function resultForTeam(
+  match: MatchWithTeams,
+  teamId: number,
+  knockoutResultOver120: boolean,
+): 'win' | 'draw' | 'loss' | null {
+  // G/B/M rozeti puan esasıyla tutarlı olmalı (ayar pasifse 90', aktifse 120').
+  const basis = pointsBasisScore(match, knockoutResultOver120);
+  if (basis.home === null || basis.away === null) return null;
   const isHome = match.home_team_id === teamId;
-  const mine = isHome ? match.home_score : match.away_score;
-  const theirs = isHome ? match.away_score : match.home_score;
+  const mine = isHome ? basis.home : basis.away;
+  const theirs = isHome ? basis.away : basis.home;
   if (mine > theirs) return 'win';
   if (mine < theirs) return 'loss';
   return 'draw';
@@ -222,12 +242,16 @@ function buildPreTournamentResponse(
 }
 
 export async function getDashboardData(userId: string, competitionId: string | null) {
-  const [selectionsLocked, tournamentStarted, lockAt, startAt] = await Promise.all([
+  const [selectionsLocked, tournamentStarted, lockAt, startAt, scoringFlags] = await Promise.all([
     areSelectionsLocked(),
     hasTournamentStarted(),
     getSelectionLockAt(),
     getTournamentStartAt(),
+    getConfigValue<{ knockout_result_over_120?: boolean }>('scoring_flags', {
+      knockout_result_over_120: false,
+    }),
   ]);
+  const knockoutResultOver120 = scoringFlags.knockout_result_over_120 ?? false;
 
   const status = {
     selectionsLocked,
@@ -354,7 +378,7 @@ export async function getDashboardData(userId: string, competitionId: string | n
         matchId: lastMatch.id,
         opponent: opponentForTeam(lastMatch, teamId),
         score: scoreForTeam(lastMatch, teamId),
-        result: resultForTeam(lastMatch, teamId),
+        result: resultForTeam(lastMatch, teamId, knockoutResultOver120),
         pointsEarned: breakdown.reduce((sum, e) => sum + Number(e.points), 0),
         playedAt: lastMatch.scheduled_at,
         stageLabel: getStageLabel(lastMatch.stage),

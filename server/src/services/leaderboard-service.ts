@@ -1,5 +1,7 @@
 import { supabase } from '../lib/config.js';
 import { unwrapOne } from '../lib/serializers.js';
+import { pointsBasisScore } from '../lib/match-basis.js';
+import { getConfigValue } from './tournament-config.js';
 
 export type TeamMatchStats = {
   won: number;
@@ -69,12 +71,22 @@ function toLeaderboardSelection(
 
 /** Aggregates W/D/L and goals from every finished match per team. */
 export async function loadTeamMatchStatsMap(): Promise<Map<number, TeamMatchStats>> {
-  const { data: matches, error } = await supabase
-    .from('matches')
-    .select('home_team_id, away_team_id, home_score, away_score')
-    .eq('status', 'finished');
+  // Takım galibiyet/beraberlik/gol istatistikleri puan esasıyla aynı skoru kullanır
+  // (ayar pasifse 90', aktifse uzatma maçlarında 120').
+  const [{ data: matches, error }, scoringFlags] = await Promise.all([
+    supabase
+      .from('matches')
+      .select(
+        'home_team_id, away_team_id, home_score, away_score, home_score_aet, away_score_aet',
+      )
+      .eq('status', 'finished'),
+    getConfigValue<{ knockout_result_over_120?: boolean }>('scoring_flags', {
+      knockout_result_over_120: false,
+    }),
+  ]);
 
   if (error) throw error;
+  const knockoutResultOver120 = scoringFlags.knockout_result_over_120 ?? false;
 
   const map = new Map<number, TeamMatchStats>();
 
@@ -85,21 +97,22 @@ export async function loadTeamMatchStatsMap(): Promise<Map<number, TeamMatchStat
   };
 
   for (const match of matches ?? []) {
-    if (match.home_score === null || match.away_score === null) continue;
+    const basis = pointsBasisScore(match, knockoutResultOver120);
+    if (basis.home === null || basis.away === null) continue;
     if (!match.home_team_id || !match.away_team_id) continue;
 
     const home = ensure(match.home_team_id);
     const away = ensure(match.away_team_id);
 
-    home.goalsFor += match.home_score;
-    home.goalsAgainst += match.away_score;
-    away.goalsFor += match.away_score;
-    away.goalsAgainst += match.home_score;
+    home.goalsFor += basis.home;
+    home.goalsAgainst += basis.away;
+    away.goalsFor += basis.away;
+    away.goalsAgainst += basis.home;
 
-    if (match.home_score > match.away_score) {
+    if (basis.home > basis.away) {
       home.won += 1;
       away.lost += 1;
-    } else if (match.home_score < match.away_score) {
+    } else if (basis.home < basis.away) {
       home.lost += 1;
       away.won += 1;
     } else {

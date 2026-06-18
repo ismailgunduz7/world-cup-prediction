@@ -15,6 +15,7 @@ import LoadingState from '@/components/LoadingState.vue';
 import Message from 'primevue/message';
 import api from '@/api/client';
 import { formatRuleDescription, formatSigned } from '@/utils/point-descriptions';
+import { formatMatchScore, type MatchScoreFields } from '@/utils/match-score';
 
 type PointEntry = {
   description: string;
@@ -99,7 +100,7 @@ function matchLabel(match: Record<string, unknown>) {
   const away = match.awayTeam as string;
 
   if (match.status === 'finished' && match.homeScore !== null) {
-    return `${home} ${match.homeScore}-${match.awayScore} ${away}`;
+    return `${home} ${formatMatchScore(match as unknown as MatchScoreFields, { separator: '-' })} ${away}`;
   }
 
   return `${home} vs ${away}`;

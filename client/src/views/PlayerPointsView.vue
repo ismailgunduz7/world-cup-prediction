@@ -15,6 +15,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import api from '@/api/client';
 import { formatRuleDescription, formatSigned } from '@/utils/point-descriptions';
+import { formatMatchScore } from '@/utils/match-score';
 
 type PointEntry = {
   description: string;
@@ -30,6 +31,10 @@ type FinishedMatch = {
   scheduledAt: string;
   homeScore: number | null;
   awayScore: number | null;
+  homeScoreAet: number | null;
+  awayScoreAet: number | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
   homeTeam: string;
   awayTeam: string;
   breakdown: PointEntry[];
@@ -105,7 +110,7 @@ function matchLabel(match: FinishedMatch) {
   const home = match.homeTeam;
   const away = match.awayTeam;
   if (match.homeScore !== null) {
-    return `${home} ${match.homeScore}-${match.awayScore} ${away}`;
+    return `${home} ${formatMatchScore(match, { separator: '-' })} ${away}`;
   }
   return `${home} vs ${away}`;
 }

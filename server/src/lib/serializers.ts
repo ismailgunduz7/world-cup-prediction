@@ -47,6 +47,10 @@ export type MatchSummaryDTO = {
   awayTeam: string;
   homeScore: number | null;
   awayScore: number | null;
+  homeScoreAet: number | null;
+  awayScoreAet: number | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
   points: number;
   breakdown: PointEntryDTO[];
 };
@@ -58,6 +62,10 @@ type MatchRow = {
   scheduled_at: string;
   home_score: number | null;
   away_score: number | null;
+  home_score_aet?: number | null;
+  away_score_aet?: number | null;
+  home_penalties?: number | null;
+  away_penalties?: number | null;
   home_team?: { name_tr?: string | null } | null;
   away_team?: { name_tr?: string | null } | null;
 };
@@ -77,6 +85,10 @@ export function toMatchSummary(match: MatchRow, breakdown: PointEntryRow[]): Mat
     awayTeam: match.away_team?.name_tr ?? '—',
     homeScore: match.home_score,
     awayScore: match.away_score,
+    homeScoreAet: match.home_score_aet ?? null,
+    awayScoreAet: match.away_score_aet ?? null,
+    homePenalties: match.home_penalties ?? null,
+    awayPenalties: match.away_penalties ?? null,
     points: entries.reduce((sum, e) => sum + e.points, 0),
     breakdown: entries,
   };

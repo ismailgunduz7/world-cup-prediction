@@ -83,7 +83,7 @@ playerRoutes.get('/:username/points', async (c) => {
   const { data: allMatches, error: matchError } = await supabase
     .from('matches')
     .select(
-      'id, stage, status, scheduled_at, home_score, away_score, home_team_id, away_team_id, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
+      'id, stage, status, scheduled_at, home_score, away_score, home_score_aet, away_score_aet, home_penalties, away_penalties, home_team_id, away_team_id, home_team:teams!matches_home_team_id_fkey(name_tr), away_team:teams!matches_away_team_id_fkey(name_tr)',
     )
     .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
     .eq('status', 'finished')

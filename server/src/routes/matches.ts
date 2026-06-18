@@ -15,7 +15,7 @@ matchesRoutes.get('/', async (c) => {
   const { data, error } = await supabase
     .from('matches')
     .select(
-      'id, stage, group_code, round_label, status, scheduled_at, home_score, away_score, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)',
+      'id, stage, group_code, round_label, status, scheduled_at, home_score, away_score, home_score_aet, away_score_aet, home_penalties, away_penalties, winner_team_id, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)',
     )
     .in('status', [...FIXTURE_STATUSES])
     .order('scheduled_at', { ascending: true });
@@ -31,6 +31,11 @@ matchesRoutes.get('/', async (c) => {
     scheduled_at: string;
     home_score: number | null;
     away_score: number | null;
+    home_score_aet: number | null;
+    away_score_aet: number | null;
+    home_penalties: number | null;
+    away_penalties: number | null;
+    winner_team_id: number | null;
     home_team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
     away_team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
   };
@@ -56,6 +61,11 @@ matchesRoutes.get('/', async (c) => {
       },
       homeScore: match.home_score,
       awayScore: match.away_score,
+      homeScoreAet: match.home_score_aet,
+      awayScoreAet: match.away_score_aet,
+      homePenalties: match.home_penalties,
+      awayPenalties: match.away_penalties,
+      winnerTeamId: match.winner_team_id,
     };
   });
 

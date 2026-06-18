@@ -505,6 +505,10 @@ adminRoutes.put('/matches/:id/result', async (c) => {
   const schema = z.object({
     homeScore: z.number().int().min(0),
     awayScore: z.number().int().min(0),
+    homeScoreAet: z.number().int().min(0).nullable().optional(),
+    awayScoreAet: z.number().int().min(0).nullable().optional(),
+    homePenalties: z.number().int().min(0).nullable().optional(),
+    awayPenalties: z.number().int().min(0).nullable().optional(),
     status: z.enum(['finished', 'live', 'scheduled', 'postponed', 'cancelled']).optional(),
     homeCorners: z.number().int().min(0).optional(),
     awayCorners: z.number().int().min(0).optional(),
@@ -530,10 +534,6 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     }
   }
 
-  if (parsed.data.homeScore === parsed.data.awayScore && existing.stage !== 'group') {
-    return c.json({ error: 'Eleme maçlarında beraberlik olamaz' }, 400);
-  }
-
   const finalStatus = parsed.data.status ?? 'finished';
   if (finalStatus === 'live') {
     const liveConstraintError = await findLiveMatchConstraintError(supabase, {
@@ -547,18 +547,81 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     }
   }
 
-  const winner =
-    parsed.data.homeScore > parsed.data.awayScore
-      ? existing.home_team_id
-      : parsed.data.awayScore > parsed.data.homeScore
-        ? existing.away_team_id
-        : null;
+  // Eleme maçlarında 90' beraberse maçı uzatma veya penaltı çözer. home_score/
+  // away_score her zaman 90' (puan esası) skorudur; uzatma/penaltı ayrı kolonlarda
+  // tutulur ve kazananı belirler. Grup maçlarında uzatma/penaltı yok sayılır.
+  const { homeScore, awayScore } = parsed.data;
+  const isKnockout = existing.stage !== 'group';
+  const aetProvided =
+    parsed.data.homeScoreAet !== undefined &&
+    parsed.data.homeScoreAet !== null &&
+    parsed.data.awayScoreAet !== undefined &&
+    parsed.data.awayScoreAet !== null;
+  const penProvided =
+    parsed.data.homePenalties !== undefined &&
+    parsed.data.homePenalties !== null &&
+    parsed.data.awayPenalties !== undefined &&
+    parsed.data.awayPenalties !== null;
+
+  let homeScoreAet: number | null = null;
+  let awayScoreAet: number | null = null;
+  let homePenalties: number | null = null;
+  let awayPenalties: number | null = null;
+  let winner: number | null;
+
+  if (!isKnockout) {
+    winner =
+      homeScore > awayScore
+        ? existing.home_team_id
+        : awayScore > homeScore
+          ? existing.away_team_id
+          : null;
+  } else if (homeScore !== awayScore) {
+    if (aetProvided || penProvided) {
+      return c.json({ error: '90 dakikada biten maçta uzatma/penaltı sonucu girilemez' }, 400);
+    }
+    winner = homeScore > awayScore ? existing.home_team_id : existing.away_team_id;
+  } else if (finalStatus !== 'finished') {
+    // Henüz bitmemiş (canlı/ertelenmiş) eleme maçı çözümleme gerektirmez.
+    winner = null;
+  } else if (penProvided) {
+    if (!aetProvided) {
+      return c.json({ error: 'Penaltı sonucu için uzatma skoru da girilmeli' }, 400);
+    }
+    if (parsed.data.homeScoreAet !== parsed.data.awayScoreAet) {
+      return c.json({ error: 'Penaltıya giden maçta uzatma skoru eşit olmalı' }, 400);
+    }
+    if (parsed.data.homePenalties === parsed.data.awayPenalties) {
+      return c.json({ error: 'Penaltı sonucu eşit olamaz' }, 400);
+    }
+    homeScoreAet = parsed.data.homeScoreAet!;
+    awayScoreAet = parsed.data.awayScoreAet!;
+    homePenalties = parsed.data.homePenalties!;
+    awayPenalties = parsed.data.awayPenalties!;
+    winner = homePenalties > awayPenalties ? existing.home_team_id : existing.away_team_id;
+  } else if (aetProvided) {
+    if (parsed.data.homeScoreAet === parsed.data.awayScoreAet) {
+      return c.json({ error: 'Uzatma berabere bittiyse penaltı sonucu girilmeli' }, 400);
+    }
+    homeScoreAet = parsed.data.homeScoreAet!;
+    awayScoreAet = parsed.data.awayScoreAet!;
+    winner = homeScoreAet > awayScoreAet ? existing.home_team_id : existing.away_team_id;
+  } else {
+    return c.json(
+      { error: 'Eleme maçında beraberlik için uzatma/penaltı sonucu girilmeli' },
+      400,
+    );
+  }
 
   const { data: match, error } = await supabase
     .from('matches')
     .update({
-      home_score: parsed.data.homeScore,
-      away_score: parsed.data.awayScore,
+      home_score: homeScore,
+      away_score: awayScore,
+      home_score_aet: homeScoreAet,
+      away_score_aet: awayScoreAet,
+      home_penalties: homePenalties,
+      away_penalties: awayPenalties,
       winner_team_id: winner,
       status: finalStatus,
       updated_at: new Date().toISOString(),
