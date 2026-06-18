@@ -14,6 +14,7 @@ import meRoutes from './routes/me.js';
 import bracketRoutes from './routes/bracket.js';
 import randomModeRoutes from './routes/random-mode.js';
 import betProgressRoutes from './routes/bet-progress.js';
+import matchesRoutes from './routes/matches.js';
 import { getSelectionLockAt, hasTournamentStarted, areSelectionsLocked } from './services/tournament-config.js';
 import { isRandomModeEnabledForUser } from './services/random-mode-service.js';
 import { optionalAuthMiddleware, type AppVariables } from './middleware/auth.js';
@@ -42,6 +43,7 @@ app.route('/api/scoring-rules', scoringRulesRoutes);
 app.route('/api/bracket', bracketRoutes);
 app.route('/api/random-mode', randomModeRoutes);
 app.route('/api/bet-progress', betProgressRoutes);
+app.route('/api/matches', matchesRoutes);
 app.route(`/api/admin/${config.adminPath}`, adminRoutes);
 
 app.get('/api/tournament/status', optionalAuthMiddleware, async (c) => {

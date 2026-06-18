@@ -30,6 +30,12 @@ const router = createRouter({
       meta: { requiresAuth: true, participantOnly: true },
     },
     {
+      path: '/fikstur',
+      name: 'fixtures',
+      component: () => import('@/views/FixturesView.vue'),
+      meta: { requiresAuth: true, participantOnly: true },
+    },
+    {
       path: '/kurallar',
       name: 'rules',
       component: () => import('@/views/RulesView.vue'),

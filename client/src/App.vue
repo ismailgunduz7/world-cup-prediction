@@ -69,6 +69,7 @@ const navItems = computed(() => [
   { to: '/', label: 'Ana Sayfa', icon: 'pi pi-home' },
   { to: '/secimlerim', label: 'Seçimlerim', icon: 'pi pi-check-square' },
   { to: '/puan-durumu', label: 'Puan Durumu', icon: 'pi pi-chart-bar' },
+  { to: '/fikstur', label: 'Fikstür', icon: 'pi pi-calendar' },
   { to: '/bracket', label: 'Bracket', icon: 'pi pi-sitemap' },
   ...(randomModeEnabled.value
     ? [{ to: '/rastgele', label: 'Rastgele Mod', icon: 'pi pi-bolt' }]
