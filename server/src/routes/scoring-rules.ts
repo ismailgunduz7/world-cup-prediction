@@ -16,8 +16,12 @@ scoringRulesRoutes.get('/', async (c) => {
         'id, points, rule_type:scoring_rule_types(id, name_tr, description_tr, sort_order, is_active), tier:tiers(id, name_tr, sort_order)',
       )
       .order('rule_type_id'),
-    getConfigValue<{ group_stage_counts_as_round_advancement: boolean }>('scoring_flags', {
+    getConfigValue<{
+      group_stage_counts_as_round_advancement: boolean;
+      knockout_result_over_120: boolean;
+    }>('scoring_flags', {
       group_stage_counts_as_round_advancement: false,
+      knockout_result_over_120: false,
     }),
   ]);
 

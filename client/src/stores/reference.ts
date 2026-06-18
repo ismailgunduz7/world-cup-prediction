@@ -30,7 +30,10 @@ export type ScoringRule = {
 };
 export type ScoringRulesData = {
   rules: ScoringRule[];
-  scoringFlags: { group_stage_counts_as_round_advancement: boolean };
+  scoringFlags: {
+    group_stage_counts_as_round_advancement: boolean;
+    knockout_result_over_120: boolean;
+  };
 };
 
 export const useReferenceStore = defineStore('reference', () => {

@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue';
 import Card from 'primevue/card';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
-import Message from 'primevue/message';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import { useReferenceStore } from '@/stores/reference';
@@ -39,7 +38,10 @@ const reference = useReferenceStore();
 
 const loading = ref(true);
 const rules = ref<RuleRow[]>([]);
-const scoringFlags = ref({ group_stage_counts_as_round_advancement: false });
+const scoringFlags = ref({
+  group_stage_counts_as_round_advancement: false,
+  knockout_result_over_120: false,
+});
 
 onMounted(async () => {
   const data = await reference.ensureScoringRules();
@@ -110,10 +112,52 @@ function pointsClass(value: number) {
   <div v-else class="page-stack">
     <PageHeader title="Kurallar" subtitle="Tier ve kural tipine göre puan tablosu" />
 
-    <Message severity="info" :closable="false">
-      Grup aşaması tur atlama puanına
-      <strong>{{ scoringFlags.group_stage_counts_as_round_advancement ? 'dahil' : 'dahil değil' }}</strong>.
-    </Message>
+    <Card class="rules-explainer">
+      <template #title>Eleme turu: Uzatma ve Penaltılar</template>
+      <template #content>
+        <ul class="rules-notes">
+          <li>
+            <strong>Grup aşaması:</strong> Maçlar berabere bitebilir; galibiyet, beraberlik,
+            mağlubiyet ve gol puanları maç sonucuna göre verilir.
+          </li>
+          <li>
+            <strong>Eleme turunda 90 dakikada biten maçlar:</strong> Normal kurallar geçerlidir —
+            kazanan galibiyet, kaybeden mağlubiyet puanı alır; goller maç skoruna göre sayılır.
+          </li>
+          <li v-if="!scoringFlags.knockout_result_over_120">
+            <strong>Uzatmaya ve/veya penaltılara giden maçlar:</strong> Galibiyet/beraberlik/mağlubiyet
+            ve atılan/yenilen gol puanları <strong>90 dakikanın skoru</strong> üzerinden hesaplanır.
+            Maç 90 dakikada berabere olduğu için iki takım da beraberlik puanı ve 90 dakikadaki gol
+            puanlarını alır. Uzatma veya penaltılarda kazanan takım <strong>ayrıca tur atlama
+            bonusu</strong> kazanır.
+          </li>
+          <li v-else>
+            <strong>Uzatmaya ve/veya penaltılara giden maçlar:</strong> Galibiyet/beraberlik/mağlubiyet
+            ve atılan/yenilen gol puanları <strong>uzatma sonu (120. dakika) skoru</strong> üzerinden
+            hesaplanır. Uzatmada kazanan takım galibiyet, rakibi mağlubiyet puanı alır; penaltılarda
+            karara bağlanan maçlar 120. dakika skoruna göre beraberlik sayılır. Tur atlama bonusu her
+            durumda kazanan takıma verilir.
+          </li>
+          <li>
+            Penaltılar yalnızca turu kimin geçeceğini belirler; penaltı golleri puanlamaya dahil
+            değildir.
+          </li>
+          <li>
+            <strong>Tur atlama puanı:</strong> Grup aşaması bu puana
+            <strong>{{ scoringFlags.group_stage_counts_as_round_advancement ? 'dahildir' : 'dahil değildir' }}</strong>.
+          </li>
+        </ul>
+        <p class="rules-mode">
+          Aktif mod:
+          <strong>{{
+            scoringFlags.knockout_result_over_120
+              ? 'Eleme sonuçları 120 dakika üzerinden'
+              : 'Eleme sonuçları 90 dakika üzerinden'
+          }}</strong>
+          hesaplanıyor.
+        </p>
+      </template>
+    </Card>
 
     <Card>
       <template #content>
@@ -181,5 +225,21 @@ function pointsClass(value: number) {
 .points-value {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.rules-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+.rules-mode {
+  margin: 0.9rem 0 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
 }
 </style>
