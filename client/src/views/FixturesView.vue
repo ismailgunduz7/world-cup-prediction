@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import TabBar from '@/components/TabBar.vue';
 import api from '@/api/client';
+import { isGroupFinalMatch } from '@/utils/match-round';
 
 type FixtureTeam = { id: number | null; name: string };
 
@@ -25,6 +26,10 @@ type FixtureMatch = {
 
 type FixtureFilter = 'planned' | 'finished';
 
+type LiveSpotlightGroup =
+  | { kind: 'single'; match: FixtureMatch }
+  | { kind: 'group-final'; groupCode: string; matches: FixtureMatch[] };
+
 const filterTabs: { key: FixtureFilter; label: string }[] = [
   { key: 'planned', label: 'Planlanan' },
   { key: 'finished', label: 'Bitmiş' },
@@ -39,6 +44,39 @@ const liveMatches = computed(() =>
     .filter((m) => m.status === 'live')
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
 );
+
+const liveSpotlightGroups = computed<LiveSpotlightGroup[]>(() => {
+  const groupFinalByCode = new Map<string, FixtureMatch[]>();
+  const singles: FixtureMatch[] = [];
+
+  for (const match of liveMatches.value) {
+    if (isGroupFinalMatch(match)) {
+      const code = match.groupCode!;
+      const list = groupFinalByCode.get(code) ?? [];
+      list.push(match);
+      groupFinalByCode.set(code, list);
+      continue;
+    }
+    singles.push(match);
+  }
+
+  const groups: LiveSpotlightGroup[] = singles.map((match) => ({ kind: 'single', match }));
+
+  for (const [groupCode, groupMatches] of groupFinalByCode) {
+    const sorted = [...groupMatches].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+    if (sorted.length >= 2) {
+      groups.push({ kind: 'group-final', groupCode, matches: sorted });
+    } else {
+      groups.push({ kind: 'single', match: sorted[0] });
+    }
+  }
+
+  return groups.sort((a, b) => {
+    const aTime = a.kind === 'single' ? a.match.scheduledAt : a.matches[0].scheduledAt;
+    const bTime = b.kind === 'single' ? b.match.scheduledAt : b.matches[0].scheduledAt;
+    return aTime.localeCompare(bTime);
+  });
+});
 
 const nextUpcomingMatch = computed(() => {
   const upcoming = matches.value
@@ -122,35 +160,77 @@ function winnerSide(match: FixtureMatch): 'home' | 'away' | null {
     <PageHeader title="Fikstür" />
 
     <!-- Spotlight: canlı maç veya sıradaki maç -->
-    <section v-if="liveMatches.length" class="spotlight-section">
-      <Card v-for="match in liveMatches" :key="match.id" class="spotlight-card spotlight-card--live">
-        <template #content>
-          <div class="spotlight-top">
-            <Tag value="CANLI" severity="warn" class="spotlight-badge" />
-            <span class="spotlight-context">{{ matchContext(match) }}</span>
-          </div>
-          <div class="spotlight-scoreboard">
-            <RouterLink
-              v-if="match.homeTeam.id"
-              :to="{ name: 'team-matches', params: { id: match.homeTeam.id }, query: { from: 'fixtures' } }"
-              class="spotlight-team spotlight-team-link"
+    <section v-if="liveSpotlightGroups.length" class="spotlight-section">
+      <template v-for="group in liveSpotlightGroups" :key="group.kind === 'single' ? group.match.id : `group-${group.groupCode}`">
+        <Card
+          v-if="group.kind === 'single'"
+          class="spotlight-card spotlight-card--live"
+        >
+          <template #content>
+            <div class="spotlight-top">
+              <Tag value="CANLI" severity="warn" class="spotlight-badge" />
+              <span class="spotlight-context">{{ matchContext(group.match) }}</span>
+            </div>
+            <div class="spotlight-scoreboard">
+              <RouterLink
+                v-if="group.match.homeTeam.id"
+                :to="{ name: 'team-matches', params: { id: group.match.homeTeam.id }, query: { from: 'fixtures' } }"
+                class="spotlight-team spotlight-team-link"
+              >
+                {{ group.match.homeTeam.name }}
+              </RouterLink>
+              <span v-else class="spotlight-team">{{ group.match.homeTeam.name }}</span>
+              <span class="spotlight-score">{{ formatScore(group.match) }}</span>
+              <RouterLink
+                v-if="group.match.awayTeam.id"
+                :to="{ name: 'team-matches', params: { id: group.match.awayTeam.id }, query: { from: 'fixtures' } }"
+                class="spotlight-team spotlight-team-link"
+              >
+                {{ group.match.awayTeam.name }}
+              </RouterLink>
+              <span v-else class="spotlight-team">{{ group.match.awayTeam.name }}</span>
+            </div>
+            <p class="spotlight-time text-muted">{{ formatDate(group.match.scheduledAt) }}</p>
+          </template>
+        </Card>
+
+        <Card v-else class="spotlight-card spotlight-card--live spotlight-card--group-final">
+          <template #content>
+            <div class="spotlight-top">
+              <Tag value="CANLI" severity="warn" class="spotlight-badge" />
+              <span class="spotlight-context">Grup {{ group.groupCode }} · Son Hafta</span>
+            </div>
+            <div
+              v-for="(match, index) in group.matches"
+              :key="match.id"
+              class="spotlight-group-final-match"
+              :class="{ 'spotlight-group-final-match--bordered': index > 0 }"
             >
-              {{ match.homeTeam.name }}
-            </RouterLink>
-            <span v-else class="spotlight-team">{{ match.homeTeam.name }}</span>
-            <span class="spotlight-score">{{ formatScore(match) }}</span>
-            <RouterLink
-              v-if="match.awayTeam.id"
-              :to="{ name: 'team-matches', params: { id: match.awayTeam.id }, query: { from: 'fixtures' } }"
-              class="spotlight-team spotlight-team-link"
-            >
-              {{ match.awayTeam.name }}
-            </RouterLink>
-            <span v-else class="spotlight-team">{{ match.awayTeam.name }}</span>
-          </div>
-          <p class="spotlight-time text-muted">{{ formatDate(match.scheduledAt) }}</p>
-        </template>
-      </Card>
+              <p class="spotlight-group-final-label text-muted">{{ match.roundLabel }}</p>
+              <div class="spotlight-scoreboard">
+                <RouterLink
+                  v-if="match.homeTeam.id"
+                  :to="{ name: 'team-matches', params: { id: match.homeTeam.id }, query: { from: 'fixtures' } }"
+                  class="spotlight-team spotlight-team-link"
+                >
+                  {{ match.homeTeam.name }}
+                </RouterLink>
+                <span v-else class="spotlight-team">{{ match.homeTeam.name }}</span>
+                <span class="spotlight-score">{{ formatScore(match) }}</span>
+                <RouterLink
+                  v-if="match.awayTeam.id"
+                  :to="{ name: 'team-matches', params: { id: match.awayTeam.id }, query: { from: 'fixtures' } }"
+                  class="spotlight-team spotlight-team-link"
+                >
+                  {{ match.awayTeam.name }}
+                </RouterLink>
+                <span v-else class="spotlight-team">{{ match.awayTeam.name }}</span>
+              </div>
+            </div>
+            <p class="spotlight-time text-muted">{{ formatDate(group.matches[0].scheduledAt) }}</p>
+          </template>
+        </Card>
+      </template>
     </section>
 
     <Card v-else-if="nextUpcomingMatch" class="spotlight-card spotlight-card--upcoming">
@@ -364,6 +444,21 @@ function winnerSide(match: FixtureMatch): 'home' | 'away' | null {
 .spotlight-vs {
   color: var(--color-text-muted, #64748b);
   font-weight: 500;
+}
+
+.spotlight-group-final-match {
+  padding-top: 0.15rem;
+}
+
+.spotlight-group-final-match--bordered {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.spotlight-group-final-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
 }
 
 .fixture-list-card :deep(.p-card-body) {

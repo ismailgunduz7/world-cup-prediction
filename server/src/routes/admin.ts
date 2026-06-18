@@ -39,10 +39,10 @@ import {
   upsertMatchBetStats,
 } from '../services/bet-progress-service.js';
 import {
-  findConflictingLiveMatch,
-  isSingleLiveMatchViolation,
+  findLiveMatchConstraintError,
+  isLiveMatchConstraintViolation,
+  mapLiveMatchConstraintError,
   matchUpdateAffectsScoring,
-  SINGLE_LIVE_MATCH_ERROR,
 } from '../services/match-update-utils.js';
 import type { MatchRow, MatchStage } from '../lib/types.js';
 
@@ -536,9 +536,14 @@ adminRoutes.put('/matches/:id/result', async (c) => {
 
   const finalStatus = parsed.data.status ?? 'finished';
   if (finalStatus === 'live') {
-    const conflictingLiveMatch = await findConflictingLiveMatch(supabase, id);
-    if (conflictingLiveMatch) {
-      return c.json({ error: SINGLE_LIVE_MATCH_ERROR }, 400);
+    const liveConstraintError = await findLiveMatchConstraintError(supabase, {
+      id,
+      stage: existing.stage,
+      group_code: existing.group_code,
+      round_label: existing.round_label,
+    });
+    if (liveConstraintError) {
+      return c.json({ error: liveConstraintError }, 400);
     }
   }
 
@@ -563,8 +568,8 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     .single();
 
   if (error) {
-    if (isSingleLiveMatchViolation(error, { settingLive: finalStatus === 'live' })) {
-      return c.json({ error: SINGLE_LIVE_MATCH_ERROR }, 400);
+    if (isLiveMatchConstraintViolation(error, { settingLive: finalStatus === 'live' })) {
+      return c.json({ error: mapLiveMatchConstraintError(error.message ?? '') }, 400);
     }
     throw error;
   }
