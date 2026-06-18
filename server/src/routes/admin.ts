@@ -11,7 +11,7 @@ import {
   setGroupRankingsManually,
   syncKnockoutAdvancementFromMatch,
 } from '../services/scoring-engine.js';
-import { setConfigValue } from '../services/tournament-config.js';
+import { setConfigValue, invalidateTournamentConfigCache } from '../services/tournament-config.js';
 import { getGroupStandingsSummaries } from '../services/group-standings-service.js';
 import { buildPlayerLeaderboard } from '../services/leaderboard-service.js';
 import {
@@ -38,6 +38,7 @@ import {
   updateBetProgressConfig,
   upsertMatchBetStats,
 } from '../services/bet-progress-service.js';
+import { matchUpdateAffectsScoring } from '../services/match-update-utils.js';
 import type { MatchRow, MatchStage } from '../lib/types.js';
 
 const adminRoutes = new Hono<{ Variables: AppVariables }>();
@@ -490,6 +491,7 @@ adminRoutes.post('/matches', async (c) => {
     .single();
 
   if (error) throw error;
+  invalidateTournamentConfigCache();
   return c.json({ match: data }, 201);
 });
 
@@ -550,14 +552,21 @@ adminRoutes.put('/matches/:id/result', async (c) => {
   if (error) throw error;
 
   const matchRow = match as MatchRow;
-  if (matchRow.stage === 'group') {
-    await rebuildGroupStandingsPreservingFinalization();
-    await maybeAutoComputeBestThirdRankings();
-    await maybeSyncKnockoutRoundOf32();
+  const needsScoringPipeline = matchUpdateAffectsScoring(existing as MatchRow, parsed.data);
+
+  let result: { entriesCount: number; skipped?: boolean };
+  if (needsScoringPipeline) {
+    if (matchRow.stage === 'group') {
+      await rebuildGroupStandingsPreservingFinalization();
+      await maybeAutoComputeBestThirdRankings();
+      await maybeSyncKnockoutRoundOf32();
+    }
+    await syncKnockoutAdvancementFromMatch(matchRow);
+    await syncBracketFromMatchResult(matchRow);
+    result = await recalculateAllPoints();
+  } else {
+    result = { entriesCount: 0, skipped: true };
   }
-  await syncKnockoutAdvancementFromMatch(matchRow);
-  await syncBracketFromMatchResult(matchRow);
-  const result = await recalculateAllPoints();
 
   const hasBetStats =
     parsed.data.homeCorners !== undefined &&
@@ -575,6 +584,7 @@ adminRoutes.put('/matches/:id/result', async (c) => {
     });
   }
 
+  invalidateTournamentConfigCache();
   return c.json({ match, betStats, recalculated: result });
 });
 
@@ -603,6 +613,7 @@ adminRoutes.delete('/matches/:id', async (c) => {
   }
 
   const result = await recalculateAllPoints();
+  invalidateTournamentConfigCache();
   return c.json({ success: true, recalculated: result });
 });
 

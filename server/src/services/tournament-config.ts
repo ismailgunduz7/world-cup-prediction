@@ -1,6 +1,16 @@
 import { supabase } from '../lib/config.js';
 import type { TournamentConfigRow } from '../lib/types.js';
 
+const CONFIG_CACHE_TTL_MS = 60_000;
+
+let tournamentStartAtCache: { value: Date | null; expiresAt: number } | null = null;
+let selectionLockAtCache: { value: Date | null; expiresAt: number } | null = null;
+
+export function invalidateTournamentConfigCache(): void {
+  tournamentStartAtCache = null;
+  selectionLockAtCache = null;
+}
+
 export async function getConfigValue<T>(key: string, fallback: T): Promise<T> {
   const { data, error } = await supabase
     .from('tournament_config')
@@ -19,9 +29,10 @@ export async function setConfigValue(key: string, value: Record<string, unknown>
     .upsert({ key, value, updated_at: new Date().toISOString() });
 
   if (error) throw error;
+  invalidateTournamentConfigCache();
 }
 
-export async function getSelectionLockAt(): Promise<Date | null> {
+async function computeSelectionLockAt(): Promise<Date | null> {
   const lockConfig = await getConfigValue<{ mode: string; offset_hours: number }>(
     'selection_lock',
     { mode: 'before_first_match', offset_hours: 1 },
@@ -57,13 +68,24 @@ export async function getSelectionLockAt(): Promise<Date | null> {
   return lockAt;
 }
 
+export async function getSelectionLockAt(): Promise<Date | null> {
+  const now = Date.now();
+  if (selectionLockAtCache && selectionLockAtCache.expiresAt > now) {
+    return selectionLockAtCache.value;
+  }
+
+  const value = await computeSelectionLockAt();
+  selectionLockAtCache = { value, expiresAt: now + CONFIG_CACHE_TTL_MS };
+  return value;
+}
+
 export async function areSelectionsLocked(): Promise<boolean> {
   const lockAt = await getSelectionLockAt();
   if (!lockAt) return false;
   return Date.now() >= lockAt.getTime();
 }
 
-export async function getTournamentStartAt(): Promise<Date | null> {
+async function computeTournamentStartAt(): Promise<Date | null> {
   const { data: firstMatch, error } = await supabase
     .from('matches')
     .select('scheduled_at')
@@ -80,6 +102,17 @@ export async function getTournamentStartAt(): Promise<Date | null> {
     scheduled_at: '2026-06-11T19:00:00Z',
   });
   return new Date(tournamentStart.scheduled_at);
+}
+
+export async function getTournamentStartAt(): Promise<Date | null> {
+  const now = Date.now();
+  if (tournamentStartAtCache && tournamentStartAtCache.expiresAt > now) {
+    return tournamentStartAtCache.value;
+  }
+
+  const value = await computeTournamentStartAt();
+  tournamentStartAtCache = { value, expiresAt: now + CONFIG_CACHE_TTL_MS };
+  return value;
 }
 
 export async function hasTournamentStarted(): Promise<boolean> {

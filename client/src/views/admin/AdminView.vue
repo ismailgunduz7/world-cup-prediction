@@ -772,7 +772,7 @@ async function saveScore() {
   if (!scoreMatch.value || !validateScore()) return;
 
   try {
-    await api.put(`/admin/${ADMIN_PATH}/matches/${scoreMatch.value.id}/result`, {
+    const { data } = await api.put(`/admin/${ADMIN_PATH}/matches/${scoreMatch.value.id}/result`, {
       homeScore: scoreForm.value.homeScore,
       awayScore: scoreForm.value.awayScore,
       status: scoreForm.value.status,
@@ -783,7 +783,22 @@ async function saveScore() {
     });
     toast.add({ severity: 'success', summary: 'Skor güncellendi', life: 3000 });
     scoreDialogVisible.value = false;
-    await loadDashboard();
+
+    const matchId = scoreMatch.value.id;
+    const idx = matches.value.findIndex((m) => m.id === matchId);
+    if (idx >= 0) {
+      matches.value[idx] = {
+        ...matches.value[idx],
+        ...data.match,
+        match_bet_stats: data.betStats
+          ? [data.betStats]
+          : matches.value[idx].match_bet_stats,
+      };
+    }
+
+    if (!data.recalculated?.skipped) {
+      await loadGroups();
+    }
   } catch (err: unknown) {
     toast.add({ severity: 'error', summary: 'Hata', detail: apiError(err, 'Hata'), life: 4000 });
   }

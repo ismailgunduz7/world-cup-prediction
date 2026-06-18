@@ -11,6 +11,13 @@ import { config } from '../lib/config.js';
 import type { AuthUser, UserRow } from '../lib/types.js';
 
 const SALT_ROUNDS = 12;
+const USER_CACHE_TTL_MS = 30_000;
+
+const userCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+
+export function invalidateUserCache(id: string): void {
+  userCache.delete(id);
+}
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, SALT_ROUNDS);
@@ -210,10 +217,22 @@ export async function logout(refreshToken: string): Promise<void> {
 }
 
 export async function getUserById(id: string): Promise<AuthUser | null> {
+  const now = Date.now();
+  const cached = userCache.get(id);
+  if (cached && cached.expiresAt > now) {
+    return cached.user;
+  }
+
   const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
-  if (!data) return null;
-  return toAuthUser(data as UserRow);
+  if (!data) {
+    userCache.delete(id);
+    return null;
+  }
+
+  const user = toAuthUser(data as UserRow);
+  userCache.set(id, { user, expiresAt: now + USER_CACHE_TTL_MS });
+  return user;
 }
 
 export async function findUserById(id: string): Promise<UserRow | null> {
@@ -274,6 +293,7 @@ export async function updateUser(
     await supabase.from('refresh_tokens').delete().eq('user_id', id);
   }
 
+  invalidateUserCache(id);
   return toAuthUser(data as UserRow);
 }
 
@@ -319,4 +339,6 @@ export async function deleteUser(id: string): Promise<void> {
 
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) throw error;
+
+  invalidateUserCache(id);
 }
