@@ -217,7 +217,7 @@ const slotNumbers = [1, 2, 3];
               severity="secondary"
               outlined
               size="small"
-              @click="router.push({ name: 'random-leaderboard' })"
+              @click="router.push({ name: 'leaderboard', query: { tab: 'random' } })"
             />
           </div>
 

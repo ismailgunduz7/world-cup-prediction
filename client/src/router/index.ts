@@ -49,9 +49,7 @@ const router = createRouter({
     },
     {
       path: '/rastgele/puan-durumu',
-      name: 'random-leaderboard',
-      component: () => import('@/views/RandomLeaderboardView.vue'),
-      meta: { requiresAuth: true, participantOnly: true },
+      redirect: { name: 'leaderboard', query: { tab: 'random' } },
     },
     {
       path: '/hesap',

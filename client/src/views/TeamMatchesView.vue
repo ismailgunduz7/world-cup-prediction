@@ -35,7 +35,7 @@ const openMatch = ref<string[]>([]);
 
 const backRoutes: Record<string, string> = {
   leaderboard: '/puan-durumu',
-  'random-leaderboard': '/rastgele/puan-durumu',
+  'random-leaderboard': '/puan-durumu?tab=random',
   selections: '/secimlerim',
   home: '/',
 };

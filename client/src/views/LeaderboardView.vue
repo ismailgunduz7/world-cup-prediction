@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import Card from 'primevue/card';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
@@ -13,7 +13,7 @@ import TabBar from '@/components/TabBar.vue';
 import { rankLabel, type PlayerLeaderboardEntry } from '@/utils/leaderboard';
 import api from '@/api/client';
 
-type LeaderboardTab = 'players' | 'teams' | 'groups';
+type LeaderboardTab = 'players' | 'teams' | 'groups' | 'random';
 
 type GroupStandingRow = {
   rank: number;
@@ -66,6 +66,8 @@ const tabs: { key: LeaderboardTab; label: string }[] = [
   { key: 'groups', label: 'Grup Puanları' },
 ];
 
+const randomTab = { key: 'random' as const, label: 'Rastgele' };
+
 type TeamEntry = {
   rank: number;
   teamId: number;
@@ -77,24 +79,50 @@ type TeamEntry = {
 };
 
 const toast = useToast();
+const route = useRoute();
 const router = useRouter();
 const loading = ref(true);
+const randomModeEnabled = ref(false);
 const activeTab = ref<LeaderboardTab>('players');
 const entries = ref<PlayerLeaderboardEntry[]>([]);
+const randomEntries = ref<PlayerLeaderboardEntry[]>([]);
 const teamStandings = ref<TeamEntry[]>([]);
 const groupStandings = ref<GroupStandings[]>([]);
 const bestThirds = ref<BestThirdSummary | null>(null);
 
+const visibleTabs = computed(() =>
+  randomModeEnabled.value ? [...tabs, randomTab] : tabs,
+);
+
+function resolveInitialTab(): LeaderboardTab {
+  const tab = route.query.tab;
+  if (tab === 'teams') return 'teams';
+  if (tab === 'groups') return 'groups';
+  if (tab === 'random' && randomModeEnabled.value) return 'random';
+  return 'players';
+}
+
 onMounted(async () => {
-  const [{ data: leaderboardData }, { data: groupsData }, { data: bestThirdData }] = await Promise.all([
-    api.get('/leaderboard'),
-    api.get('/groups/standings'),
-    api.get('/groups/best-thirds'),
-  ]);
+  const [{ data: leaderboardData }, { data: groupsData }, { data: bestThirdData }, { data: statusData }] =
+    await Promise.all([
+      api.get('/leaderboard'),
+      api.get('/groups/standings'),
+      api.get('/groups/best-thirds'),
+      api.get('/tournament/status'),
+    ]);
+
   entries.value = leaderboardData.entries;
   teamStandings.value = leaderboardData.teamStandings;
   groupStandings.value = groupsData.groups;
   bestThirds.value = bestThirdData.bestThirds;
+  randomModeEnabled.value = statusData.randomModeEnabled !== false;
+
+  if (randomModeEnabled.value) {
+    const { data } = await api.get('/random-mode/leaderboard');
+    randomEntries.value = data.entries;
+  }
+
+  activeTab.value = resolveInitialTab();
   loading.value = false;
 });
 
@@ -156,6 +184,24 @@ function onPlayerSelect(entry: PlayerLeaderboardEntry) {
     query: { from: 'leaderboard' },
   });
 }
+
+function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
+  if (!entry.hasSelections) {
+    toast.add({
+      severity: 'info',
+      summary: 'Atama yapılmadı',
+      detail: `${entry.displayName} henüz rastgele atama yapmadı`,
+      life: 3500,
+    });
+    return;
+  }
+
+  router.push({
+    name: 'player-points',
+    params: { id: entry.username },
+    query: { from: 'random-leaderboard', mode: 'random' },
+  });
+}
 </script>
 
 <template>
@@ -165,10 +211,19 @@ function onPlayerSelect(entry: PlayerLeaderboardEntry) {
 
     <Card class="leaderboard-card">
       <template #content>
-        <TabBar v-model="activeTab" :tabs="tabs" aria-label="Puan durumu sekmeleri" />
+        <TabBar v-model="activeTab" :tabs="visibleTabs" aria-label="Puan durumu sekmeleri" />
 
         <div v-show="activeTab === 'players'" class="leaderboard-tab-panel" role="tabpanel">
           <PlayerLeaderboardTable :entries="entries" @select="onPlayerSelect" />
+        </div>
+
+        <div v-show="activeTab === 'random'" class="leaderboard-tab-panel" role="tabpanel">
+          <PlayerLeaderboardTable
+            :entries="randomEntries"
+            selections-header="Atanan Takımlar"
+            empty-selections-label="Atama yapılmadı"
+            @select="onRandomPlayerSelect"
+          />
         </div>
 
         <div v-show="activeTab === 'teams'" class="leaderboard-tab-panel" role="tabpanel">

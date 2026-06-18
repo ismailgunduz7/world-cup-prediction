@@ -61,7 +61,7 @@ const isRandomMode = route.query.mode === 'random';
 
 const backRoutes: Record<string, string> = {
   leaderboard: '/puan-durumu',
-  'random-leaderboard': '/rastgele/puan-durumu',
+  'random-leaderboard': '/puan-durumu?tab=random',
 };
 
 const stageLabels: Record<string, string> = {
