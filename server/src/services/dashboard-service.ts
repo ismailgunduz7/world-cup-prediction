@@ -1,6 +1,7 @@
 import { supabase } from '../lib/config.js';
 import { getStageLabel } from '../lib/stage-labels.js';
 import { pointsBasisScore } from '../lib/match-basis.js';
+import { unwrapOne } from '../lib/serializers.js';
 import type { MatchStage } from '../lib/types.js';
 import { getTeamQualificationMap, qualificationLabel } from './best-third-service.js';
 import { getGroupStandingsSummaries } from './group-standings-service.js';
@@ -47,6 +48,71 @@ type SelectionTeam = {
 
 const MATCH_SELECT =
   '*, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)';
+
+const LIVE_MATCH_SELECT =
+  'id, stage, group_code, round_label, status, scheduled_at, home_score, away_score, home_score_aet, away_score_aet, home_penalties, away_penalties, home_team:teams!matches_home_team_id_fkey(id, name_tr), away_team:teams!matches_away_team_id_fkey(id, name_tr)';
+
+type LiveMatchRow = {
+  id: number;
+  stage: MatchStage;
+  group_code: string | null;
+  round_label: string | null;
+  status: string;
+  scheduled_at: string;
+  home_score: number | null;
+  away_score: number | null;
+  home_score_aet: number | null;
+  away_score_aet: number | null;
+  home_penalties: number | null;
+  away_penalties: number | null;
+  home_team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
+  away_team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
+};
+
+function serializeLiveMatch(match: LiveMatchRow) {
+  const homeTeam = unwrapOne(match.home_team);
+  const awayTeam = unwrapOne(match.away_team);
+  return {
+    id: match.id,
+    stage: match.stage,
+    stageLabel: getStageLabel(match.stage),
+    groupCode: match.group_code,
+    roundLabel: match.round_label,
+    status: match.status,
+    scheduledAt: match.scheduled_at,
+    homeTeam: {
+      id: homeTeam?.id ?? null,
+      name: homeTeam?.name_tr ?? '—',
+    },
+    awayTeam: {
+      id: awayTeam?.id ?? null,
+      name: awayTeam?.name_tr ?? '—',
+    },
+    homeScore: match.home_score,
+    awayScore: match.away_score,
+    homeScoreAet: match.home_score_aet,
+    awayScoreAet: match.away_score_aet,
+    homePenalties: match.home_penalties,
+    awayPenalties: match.away_penalties,
+  };
+}
+
+function buildLeaderSummary(
+  entries: Array<{ userId: string; displayName: string; totalScore: number; rank: number }>,
+  userId: string,
+) {
+  if (entries.length === 0) return null;
+  const leader = entries[0];
+  const chaser = entries.length > 1 ? entries[1] : null;
+  return {
+    leaderName: leader.displayName,
+    leaderScore: leader.totalScore,
+    isCurrentUserLeader: leader.userId === userId,
+    chaserName: chaser?.displayName ?? null,
+    chaserScore: chaser?.totalScore ?? null,
+    leadOverChaser: chaser ? Math.max(0, leader.totalScore - chaser.totalScore) : null,
+  };
+}
 
 function opponentForTeam(match: MatchWithTeams, teamId: number): string {
   if (match.home_team_id === teamId) return match.away_team?.name_tr ?? '—';
@@ -235,6 +301,8 @@ function buildPreTournamentResponse(
     },
     teams,
     upcoming: [],
+    liveMatches: [],
+    leaderSummary: null,
     miniLeaderboard: [],
     recentActivity: [],
     groupProgress: [],
@@ -304,6 +372,8 @@ export async function getDashboardData(userId: string, competitionId: string | n
       },
       teams: [],
       upcoming: [],
+      liveMatches: [],
+      leaderSummary: null,
       miniLeaderboard: [],
       recentActivity: [],
       groupProgress: [],
@@ -312,7 +382,7 @@ export async function getDashboardData(userId: string, competitionId: string | n
 
   const qualificationMap = await getTeamQualificationMap();
 
-  const [leaderboardEntries, groupSummaries, totalsResult, pointEntriesResult, matchesResult] =
+  const [leaderboardEntries, groupSummaries, totalsResult, pointEntriesResult, matchesResult, liveMatchesResult] =
     await Promise.all([
       buildLeaderboardEntries(competitionId),
       getGroupStandingsSummaries(qualificationMap),
@@ -327,11 +397,13 @@ export async function getDashboardData(userId: string, competitionId: string | n
         .select(MATCH_SELECT)
         .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
         .order('scheduled_at'),
+      supabase.from('matches').select(LIVE_MATCH_SELECT).eq('status', 'live').order('scheduled_at'),
     ]);
 
   if (totalsResult.error) throw totalsResult.error;
   if (pointEntriesResult.error) throw pointEntriesResult.error;
   if (matchesResult.error) throw matchesResult.error;
+  if (liveMatchesResult.error) throw liveMatchesResult.error;
 
   const meEntry = leaderboardEntries.find((e) => e.userId === userId);
   const leaderEntry = leaderboardEntries[0] ?? null;
@@ -487,6 +559,8 @@ export async function getDashboardData(userId: string, competitionId: string | n
     },
     teams,
     upcoming,
+    liveMatches: ((liveMatchesResult.data ?? []) as LiveMatchRow[]).map(serializeLiveMatch),
+    leaderSummary: buildLeaderSummary(leaderboardEntries, userId),
     miniLeaderboard: buildMiniLeaderboard(leaderboardEntries, userId),
     recentActivity,
     groupProgress,

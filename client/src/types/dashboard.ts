@@ -47,6 +47,33 @@ export type DashboardUpcoming = {
   stageLabel: string;
 };
 
+export type DashboardLiveMatch = {
+  id: number;
+  stage: string;
+  stageLabel: string;
+  groupCode: string | null;
+  roundLabel: string | null;
+  status: string;
+  scheduledAt: string;
+  homeTeam: { id: number | null; name: string };
+  awayTeam: { id: number | null; name: string };
+  homeScore: number | null;
+  awayScore: number | null;
+  homeScoreAet: number | null;
+  awayScoreAet: number | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
+};
+
+export type DashboardLeaderSummary = {
+  leaderName: string;
+  leaderScore: number;
+  isCurrentUserLeader: boolean;
+  chaserName: string | null;
+  chaserScore: number | null;
+  leadOverChaser: number | null;
+};
+
 export type DashboardMiniLeaderboardEntry =
   | {
       isGap?: false;
@@ -91,6 +118,8 @@ export type DashboardData = {
   me: DashboardMe;
   teams: DashboardTeam[];
   upcoming: DashboardUpcoming[];
+  liveMatches: DashboardLiveMatch[];
+  leaderSummary: DashboardLeaderSummary | null;
   miniLeaderboard: DashboardMiniLeaderboardEntry[];
   recentActivity: DashboardActivity[];
   groupProgress: DashboardGroupProgress[];

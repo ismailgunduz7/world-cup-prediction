@@ -12,14 +12,15 @@ import TournamentGuide from '@/components/TournamentGuide.vue';
 import CountdownBanner from '@/components/dashboard/CountdownBanner.vue';
 import RankCard from '@/components/dashboard/RankCard.vue';
 import MyTeamCard from '@/components/dashboard/MyTeamCard.vue';
-import UpcomingStrip from '@/components/dashboard/UpcomingStrip.vue';
 import MiniLeaderboard from '@/components/dashboard/MiniLeaderboard.vue';
 import RecentActivity from '@/components/dashboard/RecentActivity.vue';
 import GroupProgress from '@/components/dashboard/GroupProgress.vue';
+import LiveSpotlight from '@/components/LiveSpotlight.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useReferenceStore } from '@/stores/reference';
 import api from '@/api/client';
 import { loadSelectionDraft } from '@/utils/selection-draft';
+import { buildLiveSpotlightGroups } from '@/utils/live-spotlight';
 import type { DashboardData, GuideGroup, GuideTier } from '@/types/dashboard';
 
 const auth = useAuthStore();
@@ -57,6 +58,20 @@ const draftSelectionCount = computed(() => {
 const effectiveSelectionCount = computed(() =>
   Math.max(savedSelectionCount.value, draftSelectionCount.value),
 );
+
+const liveSpotlightGroups = computed(() =>
+  dashboard.value ? buildLiveSpotlightGroups(dashboard.value.liveMatches) : [],
+);
+
+const userTeamIds = computed(() => dashboard.value?.teams.map((t) => t.teamId) ?? []);
+
+const panelSubtitle = computed(() => {
+  if (liveSpotlightGroups.value.length > 0) {
+    const count = dashboard.value?.liveMatches.length ?? 0;
+    return count === 1 ? '1 canlı maç devam ediyor' : `${count} canlı maç devam ediyor`;
+  }
+  return 'Canlı sıralama, takımların ve maçların özeti';
+});
 
 async function loadHome() {
   loading.value = true;
@@ -203,14 +218,20 @@ function formatLockDate(iso: string | null) {
 
     <!-- Faz 4: Turnuva başladı -->
     <template v-else>
-      <PageHeader title="Panelim" subtitle="Canlı sıralama, takımların ve maçların özeti" />
+      <PageHeader title="Panelim" :subtitle="panelSubtitle" />
 
       <Message v-if="!dashboard.me.hasSelections" severity="warn" :closable="false">
         Henüz 3 takım seçmediniz. Sıralamaya dahil olmak ve puan kazanmak için kadro seçmeniz gerekir.
       </Message>
 
       <template v-else>
-        <RankCard :me="dashboard.me" />
+        <LiveSpotlight
+          :groups="liveSpotlightGroups"
+          link-from="home"
+          :highlight-team-ids="userTeamIds"
+        />
+
+        <RankCard :me="dashboard.me" :leader-summary="dashboard.leaderSummary" />
 
         <section class="dashboard-section">
           <h2 class="section-title">Takımlarım</h2>
@@ -220,11 +241,12 @@ function formatLockDate(iso: string | null) {
         </section>
 
         <div class="dashboard-grid">
-          <UpcomingStrip :matches="dashboard.upcoming" />
-          <MiniLeaderboard :entries="dashboard.miniLeaderboard" :player-count="dashboard.me.playerCount" />
+          <MiniLeaderboard
+            :entries="dashboard.miniLeaderboard"
+            :player-count="dashboard.me.playerCount"
+          />
+          <RecentActivity :activities="dashboard.recentActivity" />
         </div>
-
-        <RecentActivity :activities="dashboard.recentActivity" />
 
         <section v-if="dashboard.groupProgress.length" class="dashboard-section">
           <h2 class="section-title">Grup ilerlemesi</h2>
