@@ -233,6 +233,13 @@ function formatLockDate(iso: string | null) {
 
         <RankCard :me="dashboard.me" :leader-summary="dashboard.leaderSummary" />
 
+        <RankCard
+          v-if="dashboard.randomRank"
+          :me="dashboard.randomRank.me"
+          :leader-summary="dashboard.randomRank.leaderSummary"
+          rank-label="Rastgele mod"
+        />
+
         <section class="dashboard-section">
           <h2 class="section-title">Takımlarım</h2>
           <div class="teams-grid">

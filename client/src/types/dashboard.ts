@@ -74,6 +74,11 @@ export type DashboardLeaderSummary = {
   leadOverChaser: number | null;
 };
 
+export type DashboardRankContext = {
+  me: DashboardMe;
+  leaderSummary: DashboardLeaderSummary | null;
+};
+
 export type DashboardMiniLeaderboardEntry =
   | {
       isGap?: false;
@@ -120,6 +125,7 @@ export type DashboardData = {
   upcoming: DashboardUpcoming[];
   liveMatches: DashboardLiveMatch[];
   leaderSummary: DashboardLeaderSummary | null;
+  randomRank: DashboardRankContext | null;
   miniLeaderboard: DashboardMiniLeaderboardEntry[];
   recentActivity: DashboardActivity[];
   groupProgress: DashboardGroupProgress[];

@@ -6,7 +6,10 @@ import type { DashboardLeaderSummary, DashboardMe } from '@/types/dashboard';
 const props = defineProps<{
   me: DashboardMe;
   leaderSummary: DashboardLeaderSummary | null;
+  rankLabel?: string;
 }>();
+
+const heading = computed(() => props.rankLabel ?? 'Sıralaman');
 
 const showPointsToNext = computed(
   () =>
@@ -26,7 +29,7 @@ function formatPlayerPoints(name: string, score: number) {
     <template #content>
       <div class="rank-card-inner">
         <div class="rank-hero">
-          <p class="rank-label">Sıralaman</p>
+          <p class="rank-label">{{ heading }}</p>
           <p v-if="me.rank !== null" class="rank-value">
             {{ me.rank }} <span class="rank-total">/ {{ me.playerCount }}</span>
           </p>

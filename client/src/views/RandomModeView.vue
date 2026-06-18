@@ -75,12 +75,8 @@ const canTrigger = computed(
 const configLocked = computed(() => isTriggered.value);
 const busy = computed(() => triggering.value || rerollingSlot.value !== null);
 
-onMounted(async () => {
-  const [mineRes, teamsData] = await Promise.all([
-    api.get('/random-mode/mine'),
-    reference.ensureTeams(),
-  ]);
-
+async function loadMine() {
+  const mineRes = await api.get('/random-mode/mine');
   const mine = mineRes.data;
   enabled.value = mine.enabled;
   selectionsLocked.value = mine.selectionsLocked;
@@ -93,7 +89,10 @@ onMounted(async () => {
   for (const s of slots.value) {
     if (s.team) display.value[s.slot] = s.team.name;
   }
+}
 
+onMounted(async () => {
+  const [, teamsData] = await Promise.all([loadMine(), reference.ensureTeams()]);
   tiers.value = teamsData.tiers;
   groups.value = teamsData.groups;
   allTeamNames.value = teamsData.groups.flatMap((g) => g.teams).map((t) => t.name);
