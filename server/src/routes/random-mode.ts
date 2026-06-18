@@ -4,6 +4,7 @@ import { supabase } from '../lib/config.js';
 import { authMiddleware, participantMiddleware, type AppVariables } from '../middleware/auth.js';
 import { areSelectionsLocked } from '../services/tournament-config.js';
 import { isRandomModeEnabledForUser } from '../services/random-mode-service.js';
+import { buildRandomModeLeaderboard } from '../services/leaderboard-service.js';
 import { unwrapOne } from '../lib/serializers.js';
 
 const SLOT_COUNT = 3;
@@ -312,70 +313,8 @@ randomModeRoutes.post('/reroll', async (c) => {
 
 randomModeRoutes.get('/leaderboard', async (c) => {
   const user = c.get('user');
-
-  // Players only see others within their own competition; unassigned users see
-  // an empty leaderboard.
-  if (!user.competitionId) {
-    return c.json({ entries: [] });
-  }
-
-  const { data: users, error: userError } = await supabase
-    .from('users')
-    .select('id, username, display_name')
-    .eq('is_admin', false)
-    .eq('competition_id', user.competitionId)
-    .order('display_name');
-  if (userError) throw userError;
-
-  const userIds = (users ?? []).map((u) => u.id);
-  if (userIds.length === 0) {
-    return c.json({ entries: [] });
-  }
-
-  const { data: slots, error: slotError } = await supabase
-    .from('random_mode_teams')
-    .select('user_id, slot, team:teams(id, name_tr)')
-    .in('user_id', userIds)
-    .order('slot');
-  if (slotError) throw slotError;
-
-  const { data: totals, error: totalError } = await supabase.from('team_total_points').select('*');
-  if (totalError) throw totalError;
-  const pointsMap = new Map((totals ?? []).map((t) => [t.team_id, Number(t.total_points)]));
-
-  type SlotRow = {
-    user_id: string;
-    slot: number;
-    team: { id: number; name_tr: string } | { id: number; name_tr: string }[] | null;
-  };
-
-  const byUser = new Map<string, SlotRow[]>();
-  for (const row of (slots ?? []) as SlotRow[]) {
-    const list = byUser.get(row.user_id) ?? [];
-    list.push(row);
-    byUser.set(row.user_id, list);
-  }
-
-  const entries = (users ?? []).map((u) => {
-    const userSlots = byUser.get(u.id) ?? [];
-    const teams = userSlots.map((s) => unwrapOne(s.team));
-    const totalScore = teams.reduce((sum, team) => sum + (team ? pointsMap.get(team.id) ?? 0 : 0), 0);
-    return {
-      username: u.username,
-      displayName: u.display_name,
-      isCurrentUser: u.id === user.id,
-      totalScore,
-      hasSelections: userSlots.length > 0,
-      selections: teams.map((team) => ({
-        name: team?.name_tr ?? '—',
-        points: team ? pointsMap.get(team.id) ?? 0 : 0,
-      })),
-    };
-  });
-
-  entries.sort((a, b) => b.totalScore - a.totalScore);
-
-  return c.json({ entries: entries.map((e, index) => ({ ...e, rank: index + 1 })) });
+  const entries = await buildRandomModeLeaderboard(user.competitionId, user.id);
+  return c.json({ entries });
 });
 
 export default randomModeRoutes;

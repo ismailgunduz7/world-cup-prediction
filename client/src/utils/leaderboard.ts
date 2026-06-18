@@ -1,6 +1,17 @@
 /** Shared leaderboard types and formatters used by the player leaderboards. */
 
-export type LeaderboardSelection = { name: string; points: number };
+export type LeaderboardSelection = {
+  teamId: number;
+  name: string;
+  points: number;
+  tierName: string | null;
+  groupCode: string;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+};
 
 export type PlayerLeaderboardEntry = {
   rank: number;
@@ -20,15 +31,12 @@ export function rankLabel(rank: number): string | number {
   return rank;
 }
 
-/**
- * Comma-separated "Team (Np)" summary of a player's picks, or `emptyLabel`
- * when the player has none. The label differs by mode (real picks vs. random
- * assignment), so it is passed in by the caller.
- */
-export function formatSelections(
-  entry: Pick<PlayerLeaderboardEntry, 'hasSelections' | 'selections'>,
-  emptyLabel: string,
-): string {
-  if (!entry.hasSelections) return emptyLabel;
-  return entry.selections.map((s) => `${s.name} (${s.points}p)`).join(', ');
+export function teamSlots(
+  entry: Pick<PlayerLeaderboardEntry, 'selections'>,
+): Array<LeaderboardSelection | null> {
+  const slots: Array<LeaderboardSelection | null> = [null, null, null];
+  for (let i = 0; i < Math.min(3, entry.selections.length); i++) {
+    slots[i] = entry.selections[i];
+  }
+  return slots;
 }

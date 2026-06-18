@@ -220,8 +220,8 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
         <div v-show="activeTab === 'random'" class="leaderboard-tab-panel" role="tabpanel">
           <PlayerLeaderboardTable
             :entries="randomEntries"
-            selections-header="Atanan Takımlar"
             empty-selections-label="Atama yapılmadı"
+            team-link-from="random-leaderboard"
             @select="onRandomPlayerSelect"
           />
         </div>
