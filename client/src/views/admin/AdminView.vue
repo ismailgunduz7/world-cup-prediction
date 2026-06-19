@@ -1964,13 +1964,6 @@ function isSelf(userId: string) {
           </div>
           <Button label="Kaydet" icon="pi pi-check" @click="saveScoringFlags" />
         </section>
-
-        <section class="settings-section">
-          <h3 class="section-title">Rastgele mod</h3>
-          <Message severity="info" :closable="false">
-            Rastgele mod artık her yarışma için ayrı ayrı açılıp kapatılır. "Yarışmalar" sekmesinden ilgili yarışmayı düzenleyin.
-          </Message>
-        </section>
         </div>
 
         <div v-show="activeTab === 'matches'" class="admin-tab-panel" role="tabpanel">
