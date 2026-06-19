@@ -13,6 +13,7 @@
 - [Veritabanı Migrasyonları](#veritabanı-migrasyonları)
 - [Ana Sayfa (Katılımcı)](#ana-sayfa-katılımcı)
 - [Bracket Tahmini](#bracket-tahmini)
+- [Fikstür](#fikstür)
 - [Rastgele Mod](#rastgele-mod)
 - [Yarışmalar](#yarışmalar)
 - [Geliştirme](#geliştirme)
@@ -35,7 +36,8 @@
 - **Bracket tahmin kum havuzu** (grup sıralaması + en iyi 8 üçüncü → eleme ağacı; kaydedilmez, puanları etkilemez)
 - **Rastgele mod** (gerçek seçimden bağımsız; koşul + tier filtresine göre animasyonlu 3 takım ataması, bir kez yeniden atma, kendi puan durumu sayfası)
 - 3 takım seçimi (kilit tarihinden önce)
-- Canlı puan durumu ve sıralama tablosu
+- Canlı puan durumu ve sıralama tablosu (oyuncu başına seçtiği takımların detaylı kolonları; gerçek + rastgele mod sekmeleri)
+- Fikstür sayfası (tüm maçlar + canlı/sıradaki maç spotlight’ı)
 - Oyuncu detay sayfası (puan kırılımı)
 - Takım sayfası (maç geçmişi ve puanlar)
 - Grup puan durumları ve eleme durumu etiketleri
@@ -149,7 +151,7 @@ Detaylar için [Ortam Değişkenleri](#ortam-değişkenleri) bölümüne bakın.
 
 ### 4. Veritabanı migrasyonlarını uygulayın
 
-Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya adı sırasına göre** çalıştırın (001 → 022):
+Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya adı sırasına göre** çalıştırın (001 → 025):
 
 ```text
 20260602155311_001_initial_schema.sql
@@ -174,6 +176,9 @@ Supabase SQL Editor’da `supabase/migrations/` altındaki dosyaları **dosya ad
 20260610160000_020_competitions.sql
 20260611120000_021_refresh_token_rotation_grace.sql
 20260612100913_022_bet_progress.sql
+20260618145808_023_single_live_match.sql
+20260619005120_024_group_final_simultaneous_live.sql
+20260619013610_025_knockout_extra_time_penalties.sql
 ```
 
 > **Önemli:** Migration dosya adlarındaki zaman damgası gerçek oluşturma anını yansıtmalıdır. Yeni migration eklerken `.cursor/rules/supabase-migrations.mdc` kurallarına uyun. Ayrıntılı açıklamalar için [Veritabanı Migrasyonları](#veritabanı-migrasyonları) tablosuna bakın.
@@ -233,30 +238,33 @@ Migration dosya adı formatı:
 yyyyMMddHHmmss_NNN_snake_case_aciklama.sql
 ```
 
-| #   | Dosya                                | Açıklama                                                         |
-| --- | ------------------------------------ | ---------------------------------------------------------------- |
-| 001 | `initial_schema`                     | Temel şema: kullanıcılar, takımlar, maçlar, puanlar              |
-| 002 | `seed_tiers`                         | 5 tier seviyesi                                                  |
-| 003 | `seed_scoring_rule_types`            | Puan kuralı türleri                                              |
-| 004 | `seed_tier_scoring_rules`            | Tier × kural puan tablosu                                        |
-| 005 | `seed_teams`                         | 48 takım (12 grup × 4)                                           |
-| 006 | `seed_tournament_config`             | Turnuva başlangıç ve kilit ayarları                              |
-| 007 | `seed_opening_match`                 | Açılış maçı                                                      |
-| 008 | `seed_group_matches`                 | 72 grup maçı                                                     |
-| 009 | `rename_usa_team`                    | ABD takım adı düzeltmesi                                         |
-| 010 | `group_manual_rank`                  | Manuel grup sıralaması bayrağı                                   |
-| 011 | `best_third_rankings`                | En iyi 3. takımlar tablosu                                       |
-| 012 | `knockout_bracket_slots`             | Eleme bracket slot kolonları                                     |
-| 013 | `set_team_selections_fn`             | Atomik takım seçimi RPC (`set_team_selections`)                  |
-| 014 | `random_mode`                        | Rastgele mod tabloları + RPC'ler                                 |
-| 015 | `random_mode_reroll_history`         | Reroll geçmişi (hangi takım yerine ne geldi)                     |
-| 016 | `random_mode_no_same_group`          | "Aynı gruptan takım gelmesin" koşulu + güncellenen RPC           |
-| 017 | `seed_bronze_medal_scoring`          | Bronz madalya puan kuralı (3.lük maçı kazananı)                  |
-| 018 | `reorder_medal_scoring_rule_ids`     | Madalya kural ID'lerini bronz/gümüş/altın sırasına alma          |
-| 019 | `fix_advisor_findings`               | Supabase advisor bulguları (SECURITY INVOKER, search_path)       |
-| 020 | `competitions`                       | Yarışmalar tablosu + `users.competition_id`                      |
-| 021 | `refresh_token_rotation_grace`       | Yakın eşzamanlı refresh isteklerinde oturum düşmesini önler      |
-| 022 | `bet_progress`                       | Bahis hedefleri (`bet_progress_config`) ve maç istatistikleri    |
+| #   | Dosya                            | Açıklama                                                                           |
+| --- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| 001 | `initial_schema`                 | Temel şema: kullanıcılar, takımlar, maçlar, puanlar                                |
+| 002 | `seed_tiers`                     | 5 tier seviyesi                                                                    |
+| 003 | `seed_scoring_rule_types`        | Puan kuralı türleri                                                                |
+| 004 | `seed_tier_scoring_rules`        | Tier × kural puan tablosu                                                          |
+| 005 | `seed_teams`                     | 48 takım (12 grup × 4)                                                             |
+| 006 | `seed_tournament_config`         | Turnuva başlangıç ve kilit ayarları                                                |
+| 007 | `seed_opening_match`             | Açılış maçı                                                                        |
+| 008 | `seed_group_matches`             | 72 grup maçı                                                                       |
+| 009 | `rename_usa_team`                | ABD takım adı düzeltmesi                                                           |
+| 010 | `group_manual_rank`              | Manuel grup sıralaması bayrağı                                                     |
+| 011 | `best_third_rankings`            | En iyi 3. takımlar tablosu                                                         |
+| 012 | `knockout_bracket_slots`         | Eleme bracket slot kolonları                                                       |
+| 013 | `set_team_selections_fn`         | Atomik takım seçimi RPC (`set_team_selections`)                                    |
+| 014 | `random_mode`                    | Rastgele mod tabloları + RPC'ler                                                   |
+| 015 | `random_mode_reroll_history`     | Reroll geçmişi (hangi takım yerine ne geldi)                                       |
+| 016 | `random_mode_no_same_group`      | "Aynı gruptan takım gelmesin" koşulu + güncellenen RPC                             |
+| 017 | `seed_bronze_medal_scoring`      | Bronz madalya puan kuralı (3.lük maçı kazananı)                                    |
+| 018 | `reorder_medal_scoring_rule_ids` | Madalya kural ID'lerini bronz/gümüş/altın sırasına alma                            |
+| 019 | `fix_advisor_findings`           | Supabase advisor bulguları (SECURITY INVOKER, search_path)                         |
+| 020 | `competitions`                   | Yarışmalar tablosu + `users.competition_id`                                        |
+| 021 | `refresh_token_rotation_grace`   | Yakın eşzamanlı refresh isteklerinde oturum düşmesini önler                        |
+| 022 | `bet_progress`                   | Bahis hedefleri (`bet_progress_config`) ve maç istatistikleri                      |
+| 023 | `single_live_match`              | Aynı anda tek canlı maça izin veren kısmi unique index                             |
+| 024 | `group_final_simultaneous_live`  | Grup son haftasında (5./6. maç) aynı gruptan iki canlı maça izin veren trigger     |
+| 025 | `knockout_extra_time_penalties`  | Eleme maçlarına uzatma/penaltı kolonları + `knockout_result_over_120` puan bayrağı |
 
 ---
 
@@ -269,7 +277,7 @@ Ana sayfa (`/`) turnuva durumuna göre dört fazda çalışır. Veri kaynağı: 
 | 1 | Seçimler açık, kadro eksik | Turnuva rehberi, kilide geri sayım, Seçimlerim linki |
 | 2 | Seçimler açık, 3 takım seçildi | Kadro kartları, kilide geri sayım, düzenleme mesajı ve linki, katlanabilir rehber |
 | 3 | Seçimler kilitli, turnuva başlamadı | Kadro özeti, ilk maça geri sayım, katlanabilir rehber |
-| 4 | Turnuva başladı | Kişisel panel: sıralama kartı, takım kartları, yaklaşan maçlar, mini lider tablosu, son hareketler, grup ilerlemesi |
+| 4 | Turnuva başladı | Kişisel panel: sıralama kartı (gerçek + rastgele mod), canlı/sıradaki maç spotlight’ı, takım kartları, yaklaşan maçlar, mini lider tablosu, son hareketler, grup ilerlemesi |
 
 Turnuva başlamadan dashboard endpoint’i yalnızca hafif veri döner (`status`, seçimler, minimal `teams`); ağır sorgular (lider tablosu, maç geçmişi, grup özeti) Faz 4’te çalışır.
 
@@ -291,6 +299,12 @@ Son 32 eşleşmeleri ve üçüncülük slot atamaları (`3@…`) resmî FIFA 202
 
 ---
 
+## Fikstür
+
+`/fikstur` sayfası tüm turnuva maçlarını tek listede gösterir (grup + eleme). Veri kaynağı `GET /api/matches` (katılımcı; `live`, `scheduled`, `finished`, `postponed` statüsündeki maçları tarihe göre sıralı döner). Sayfanın üstünde canlı/sıradaki maçı vurgulayan bir **spotlight** kartı bulunur (`LiveSpotlight` bileşeni; aynı mantık ana sayfa Faz 4 panelinde de kullanılır). Eleme maçlarında skorlar uzatma (`120'`) ve penaltı bilgisiyle birlikte gösterilir.
+
+---
+
 ## Rastgele Mod
 
 `/rastgele` sayfası, gerçek seçim yarışmasından **bağımsız** ikinci bir oyundur: oyuncuya, seçtiği koşula ve tier filtresine göre rastgele 3 takım atanır. Gerçek seçim akışı (`/secimlerim`) hiç değişmez; puanlama her iki modda da aynı `team_total_points` üzerinden işler. Rastgele mod, admin tarafından **her yarışma için ayrı ayrı** açılıp kapatılabilir (`competitions.random_mode_enabled`); hiçbir yarışmaya atanmamış oyuncular için kapalıdır. Bkz. [Yarışmalar](#yarışmalar).
@@ -303,7 +317,7 @@ Son 32 eşleşmeleri ve üçüncülük slot atamaları (`3@…`) resmî FIFA 202
 
 Ek olarak **"Aynı gruptan takım gelmesin"** koşulu işaretlenebilir; bu durumda atanan 3 takımın her biri farklı bir Dünya Kupası grubundan seçilir (yeniden atmada da değişmeyen iki takımın grupları dışlanır). Bu koşul yeterli sayıda farklı grup yoksa anlamlı bir hata döndürür.
 
-**Akış:** Oyuncu koşul + (opsiyonel) aynı-grup kuralı + tier filtresini belirler ve "Rastgele Seç"e basar. Havuz ve rastgele seçim **sunucuda** (yetkili) yapılır; istemci sonucu slot-makinesi animasyonuyla 1→2→3 sırayla açar. Tetikleme sonrası koşul ve tier filtresi **kilitlenir**. Oyuncu, takımlardan **yalnızca birini** aynı filtrelerle **bir kez** yeniden atabilir (reroll). Tüm tercihler ve atanan takımlar veritabanına yazılır (`random_mode_entries`, `random_mode_teams`). Tetikleme/yeniden atma gerçek seçimle aynı kilide tabidir (`areSelectionsLocked()`). Modun kendi puan durumu sayfası vardır (`/rastgele/puan-durumu`).
+**Akış:** Oyuncu koşul + (opsiyonel) aynı-grup kuralı + tier filtresini belirler ve "Rastgele Seç"e basar. Havuz ve rastgele seçim **sunucuda** (yetkili) yapılır; istemci sonucu slot-makinesi animasyonuyla 1→2→3 sırayla açar. Tetikleme sonrası koşul ve tier filtresi **kilitlenir**. Oyuncu, takımlardan **yalnızca birini** aynı filtrelerle **bir kez** yeniden atabilir (reroll). Tüm tercihler ve atanan takımlar veritabanına yazılır (`random_mode_entries`, `random_mode_teams`). Tetikleme/yeniden atma gerçek seçimle aynı kilide tabidir (`areSelectionsLocked()`). Modun puan durumu, Puan Durumu sayfasındaki **Rastgele** sekmesinde gösterilir (`/leaderboard?tab=random`; eski `/rastgele/puan-durumu` yolu bu sekmeye yönlendirir). Ana sayfa Faz 4 panelinde, oyuncunun rastgele moddaki sıralamasını gösteren ayrı bir rank kartı da yer alır.
 
 ---
 
@@ -397,6 +411,7 @@ Beraberlik durumunda admin manuel sıralama yapabilir; manuel sıralama finalize
 - Her takım 3 maç oynar (toplam 6 maç/grup)
 - Admin skor girer → puan tabloları güncellenir
 - Grup finalize edildiğinde sıralama bonus puanları (1./2./3.) hesaplanır
+- **Canlı maç kısıtı:** Aynı anda yalnızca **bir** maç `live` olabilir; istisna olarak grup son haftasında (5. ve 6. maç) **aynı gruptaki iki maç** eşzamanlı canlı olabilir. Kural veritabanı trigger’ı ile uygulanır; ihlalde anlamlı hata döner.
 
 ### En iyi 3. takımlar (12 → 8)
 
@@ -412,6 +427,12 @@ Beraberlik durumunda admin manuel sıralama yapabilir; manuel sıralama finalize
 - Değişken kısım: hangi 8 grubun 3.leri kalır
 - Ağaç oluşturulduğunda M73–M104 maçları veritabanına eklenir
 - Skor girildiğinde kazanan (`W74` gibi) ve kaybeden (`L101` gibi) slotları sonraki tura otomatik doldurulur
+
+#### Uzatma ve penaltılar
+
+- Eleme maçlarında 90' skoru (`home_score`/`away_score`) puan esasını tutmaya devam eder; uzatma sonu skoru (`home_score_aet`/`away_score_aet`) ve penaltı atışları (`home_penalties`/`away_penalties`) ayrı kolonlarda saklanır (yalnızca eleme maçlarında doldurulur, aksi halde `NULL`).
+- `knockout_result_over_120` puan bayrağı **kapalı** (varsayılan) iken galibiyet/beraberlik/mağlubiyet ve gol puanları 90' skoruna göre verilir; uzatma/penaltıda kazanan **yalnızca tur atlama bonusu** alır. **Açık** iken bu puanlar uzatma sonu (120') skoruna göre hesaplanır.
+- Penaltılar yalnızca turu kimin geçeceğini belirler; penaltı golleri puanlamaya dahil edilmez. Kurallar sayfası (`/kurallar`) bu davranışı aktif bayrağa göre açıklar.
 
 ```text
 Grup skorları → Finalize → En iyi 3.ler → Ağaç oluştur → Eleme skorları → Kazanan ilerletme
@@ -437,16 +458,16 @@ Admin paneline `/{ADMIN_PATH}` adresinden erişilir. Yönetici hesabıyla giriş
 
 ### Admin sekmeleri
 
-| Sekme        | İşlev                                                                            |
-| ------------ | -------------------------------------------------------------------------------- |
-| Kullanıcılar | Kullanıcı CRUD + yarışma atama                                                   |
-| Yarışmalar   | Yarışma CRUD, yarışma başına rastgele mod aç/kapa, yarışma bazlı liderlik izleme |
-| Kurallar     | Puan kuralı ve tier tabloları                                                    |
-| Ayarlar      | Turnuva config (kilit tarihi, puanlama bayrakları vb.)                           |
-| Maçlar       | Skor girişi, korner/sarı kart istatistikleri, maç oluşturma/silme                |
-| Bahis        | Turnuva geneli korner / sarı kart hedefleri (Üst bahis eşikleri)                 |
-| Gruplar      | Puan tabloları, finalize, manuel sıralama, en iyi 3.ler (12→8)                   |
-| Rastgele     | Oyuncuların rastgele seçimleri + kullanıcı bazında sıfırlama                     |
+| Sekme        | İşlev                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------- |
+| Kullanıcılar | Kullanıcı CRUD + yarışma atama                                                                             |
+| Yarışmalar   | Yarışma CRUD, yarışma başına rastgele mod aç/kapa, yarışma bazlı liderlik izleme                           |
+| Kurallar     | Puan kuralı ve tier tabloları                                                                              |
+| Ayarlar      | Turnuva config (kilit tarihi, puanlama bayrakları vb.)                                                     |
+| Maçlar       | Skor girişi (eleme için uzatma/penaltı), canlı statü, korner/sarı kart istatistikleri, maç oluşturma/silme |
+| Bahis        | Turnuva geneli korner / sarı kart hedefleri (Üst bahis eşikleri)                                           |
+| Gruplar      | Puan tabloları, finalize, manuel sıralama, en iyi 3.ler (12→8)                                             |
+| Rastgele     | Oyuncuların rastgele seçimleri + kullanıcı bazında sıfırlama                                               |
 
 ---
 
@@ -586,6 +607,7 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 | ------- | --------------------------  | -----------------------------------------------------  |
 | GET/PUT | `/selections`               | Takım seçimleri (`{ teamIds }`)                        |
 | GET     | `/teams`                    | Tier + grup listesi (tek kaynak `groups`)              |
+| GET     | `/matches`                  | Fikstür: tüm maçlar (uzatma/penaltı alanları dahil)    |
 | GET     | `/leaderboard`              | Sıralama tablosu                                       |
 | GET     | `/players/:username/points` | Oyuncu puan detayı (username ile)                      |
 | GET     | `/teams/:id/matches`        | Takım maçları ve puanları                              |
@@ -610,28 +632,28 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 
 ### Admin (seçilmiş)
 
-| Method | Endpoint                        | Açıklama                                             |
-| ------ | ------------------------------  | -----------------------------------------            |
-| PUT    | `/matches/:id/result`           | Maç skoru + opsiyonel korner/sarı kart kaydet        |
-| GET    | `/bet-progress/config`          | Bahis hedefleri                                      |
-| PUT    | `/bet-progress/config`          | Bahis hedeflerini güncelle                           |
-| GET    | `/competitions`                 | Yarışmalar + üye sayıları                            |
-| POST   | `/competitions`                 | Yarışma oluştur (`key`, `name`, `randomModeEnabled`) |
-| PUT    | `/competitions/:id`             | Yarışma güncelle                                     |
-| DELETE | `/competitions/:id`             | Yarışma sil (üyeler atanmamış olur)                  |
-| GET    | `/competitions/:id/leaderboard` | Yarışmanın liderlik tablosu (izleme)                 |
-| GET    | `/random-selections`            | Oyuncuların rastgele seçimleri                       |
-| DELETE | `/random-selections/:userId`    | Bir oyuncunun rastgele seçimini sıfırla              |
-| POST   | `/groups/:code/finalize`        | Grubu finalize et                                    |
-| PUT    | `/groups/:code/rankings`        | Manuel grup sıralaması                               |
-| GET    | `/groups/best-thirds`           | En iyi 3.ler durumu                                  |
-| POST   | `/groups/best-thirds/compute`   | Otomatik hesapla                                     |
-| PUT    | `/groups/best-thirds/rankings`  | Manuel sıralama kaydet                               |
-| POST   | `/knockout-bracket/generate`    | Eleme ağacı oluştur                                  |
-| POST   | `/knockout-bracket/sync`        | Son 32 takım atamalarını senkronize et               |
-| GET    | `/knockout-bracket/status`      | Ağaç durumu                                          |
-| GET    | `/teams/eligible?stage=...`     | Eleme için uygun takımlar                            |
-| POST   | `/recalculate`                  | Tüm puanları yeniden hesapla                         |
+| Method | Endpoint                        | Açıklama                                                                         |
+| ------ | ------------------------------- | -------------------------------------------------------------------------------- |
+| PUT    | `/matches/:id/result`           | Maç skoru (eleme için uzatma/penaltı), statü + opsiyonel korner/sarı kart kaydet |
+| GET    | `/bet-progress/config`          | Bahis hedefleri                                                                  |
+| PUT    | `/bet-progress/config`          | Bahis hedeflerini güncelle                                                       |
+| GET    | `/competitions`                 | Yarışmalar + üye sayıları                                                        |
+| POST   | `/competitions`                 | Yarışma oluştur (`key`, `name`, `randomModeEnabled`)                             |
+| PUT    | `/competitions/:id`             | Yarışma güncelle                                                                 |
+| DELETE | `/competitions/:id`             | Yarışma sil (üyeler atanmamış olur)                                              |
+| GET    | `/competitions/:id/leaderboard` | Yarışmanın liderlik tablosu (izleme)                                             |
+| GET    | `/random-selections`            | Oyuncuların rastgele seçimleri                                                   |
+| DELETE | `/random-selections/:userId`    | Bir oyuncunun rastgele seçimini sıfırla                                          |
+| POST   | `/groups/:code/finalize`        | Grubu finalize et                                                                |
+| PUT    | `/groups/:code/rankings`        | Manuel grup sıralaması                                                           |
+| GET    | `/groups/best-thirds`           | En iyi 3.ler durumu                                                              |
+| POST   | `/groups/best-thirds/compute`   | Otomatik hesapla                                                                 |
+| PUT    | `/groups/best-thirds/rankings`  | Manuel sıralama kaydet                                                           |
+| POST   | `/knockout-bracket/generate`    | Eleme ağacı oluştur                                                              |
+| POST   | `/knockout-bracket/sync`        | Son 32 takım atamalarını senkronize et                                           |
+| GET    | `/knockout-bracket/status`      | Ağaç durumu                                                                      |
+| GET    | `/teams/eligible?stage=...`     | Eleme için uygun takımlar                                                        |
+| POST   | `/recalculate`                  | Tüm puanları yeniden hesapla                                                     |
 
 ---
 
@@ -664,6 +686,11 @@ Tüm endpoint’ler `/api` altında. Admin route’ları `/api/admin/{ADMIN_PATH
 - Üretimde varsayılan JWT secret’ları ile sunucu başlatılmaz (fail-fast)
 - Supabase service role key yalnızca sunucu tarafında kullanılır; istemciye gönderilmez
 - `.env` dosyaları git’e dahil edilmez
+
+### Performans
+
+- Maç güncellemesi puanlamayı etkilemiyorsa (örn. yalnızca `live` statüye geçiş, skoru değişmeyen kayıt) tam puan yeniden hesaplaması atlanır (`matchUpdateAffectsScoring`, `match-update-utils.ts`); admin yeniden yükleme yükü hafifletilir.
+- Turnuva başlamadan `GET /me/dashboard` yalnızca hafif veri döner; ağır sorgular Faz 4’te çalışır.
 
 ### Bilinen sınırlamalar
 
