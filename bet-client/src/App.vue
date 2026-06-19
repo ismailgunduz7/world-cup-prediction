@@ -34,6 +34,15 @@ function formatOverBetLine(target: number, label: string): string {
   return `${label} ${line.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Üst`;
 }
 
+function formatAverage(value: number | null): string {
+  if (value === null) return '—';
+  return value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function formatPercent(value: number): string {
+  return value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 const subtitle = computed(() => {
   if (!summary.value) return null;
   return `${formatOverBetLine(summary.value.targets.corners, 'Korner')} · ${formatOverBetLine(summary.value.targets.yellowCards, 'Sarı Kart')}`;
@@ -52,6 +61,17 @@ const TOURNAMENT_TOTAL_MATCHES = 72 + 16 + 8 + 4 + 2 + 1 + 1;
 
 const finishedMatchCount = computed(() => summary.value?.finishedMatches.length ?? 0);
 
+const matchesWithStatsCount = computed(() => {
+  if (!summary.value) return 0;
+  return summary.value.finishedMatches.filter((m) => m.homeCorners !== null).length;
+});
+
+const remainingMatchCount = computed(() => TOURNAMENT_TOTAL_MATCHES - finishedMatchCount.value);
+
+const finishedMatchPercent = computed(() =>
+  TOURNAMENT_TOTAL_MATCHES > 0 ? (finishedMatchCount.value / TOURNAMENT_TOTAL_MATCHES) * 100 : 0,
+);
+
 const cornersReached = computed(() => {
   if (!summary.value) return false;
   return summary.value.totals.corners >= summary.value.targets.corners;
@@ -60,6 +80,28 @@ const cornersReached = computed(() => {
 const yellowCardsReached = computed(() => {
   if (!summary.value) return false;
   return summary.value.totals.yellowCards >= summary.value.targets.yellowCards;
+});
+
+const avgCornersPerMatch = computed(() => {
+  if (!summary.value || matchesWithStatsCount.value === 0) return null;
+  return summary.value.totals.corners / matchesWithStatsCount.value;
+});
+
+const avgYellowCardsPerMatch = computed(() => {
+  if (!summary.value || matchesWithStatsCount.value === 0) return null;
+  return summary.value.totals.yellowCards / matchesWithStatsCount.value;
+});
+
+const requiredAvgCornersPerMatch = computed(() => {
+  if (!summary.value || cornersReached.value || remainingMatchCount.value <= 0) return null;
+  const remaining = summary.value.targets.corners - summary.value.totals.corners;
+  return remaining / remainingMatchCount.value;
+});
+
+const requiredAvgYellowCardsPerMatch = computed(() => {
+  if (!summary.value || yellowCardsReached.value || remainingMatchCount.value <= 0) return null;
+  const remaining = summary.value.targets.yellowCards - summary.value.totals.yellowCards;
+  return remaining / remainingMatchCount.value;
 });
 
 const spotlightTitle = computed(() =>
@@ -108,6 +150,16 @@ onMounted(async () => {
                 />
               </div>
               <p v-if="cornersReached" class="progress-done">Hedef tuttu</p>
+              <dl class="progress-pace">
+                <div class="pace-row">
+                  <dt>Biten maçlarda kullanılan ortalama korner</dt>
+                  <dd>{{ formatAverage(avgCornersPerMatch) }}</dd>
+                </div>
+                <div v-if="!cornersReached" class="pace-row">
+                  <dt>Kalan maçlarda gereken ortalama korner</dt>
+                  <dd>{{ formatAverage(requiredAvgCornersPerMatch) }}</dd>
+                </div>
+              </dl>
             </article>
 
             <article class="progress-card">
@@ -126,22 +178,31 @@ onMounted(async () => {
                 />
               </div>
               <p v-if="yellowCardsReached" class="progress-done">Hedef tuttu</p>
+              <dl class="progress-pace">
+                <div class="pace-row">
+                  <dt>Biten maçlarda çıkan ortalama sarı kart</dt>
+                  <dd>{{ formatAverage(avgYellowCardsPerMatch) }}</dd>
+                </div>
+                <div v-if="!yellowCardsReached" class="pace-row">
+                  <dt>Kalan maçlarda gereken ortalama sarı kart</dt>
+                  <dd>{{ formatAverage(requiredAvgYellowCardsPerMatch) }}</dd>
+                </div>
+              </dl>
             </article>
           </section>
 
           <section class="spotlight-match">
-            <h2>{{ spotlightTitle }}</h2>
             <div
               v-if="summary.spotlightMatch"
               class="next-match-card"
               :class="{ live: summary.spotlightMatch.kind === 'live' }"
             >
-              <p class="next-match-label">
-                {{ summary.spotlightMatch.roundLabel ?? 'Maç' }}
-                <span v-if="summary.spotlightMatch.kind === 'live'" class="live-badge">CANLI</span>
-              </p>
-              
               <template v-if="summary.spotlightMatch.kind === 'live'">
+                <div class="spotlight-live-header">
+                  <h2>{{ spotlightTitle }}</h2>
+                  <span class="live-badge">CANLI</span>
+                </div>
+                <p class="next-match-label">{{ summary.spotlightMatch.roundLabel ?? 'Maç' }}</p>
                 <p class="live-data-note">Veriler güncel olmayabilir. Kontrol ediniz.</p>
                 <div class="live-match-body">
                   <div class="match-scoreboard">
@@ -184,16 +245,21 @@ onMounted(async () => {
               </template>
 
               <template v-else>
-                <p class="next-match-teams">
-                  {{ summary.spotlightMatch.homeTeam ?? 'TBD' }}
-                  <span class="vs">vs</span>
-                  {{ summary.spotlightMatch.awayTeam ?? 'TBD' }}
-                </p>
+                <div class="next-match-compact">
+                  <div class="next-match-compact-meta">
+                    <span class="spotlight-eyebrow">{{ spotlightTitle }}</span>
+                    <span class="next-match-label">{{ summary.spotlightMatch.roundLabel ?? 'Maç' }}</span>
+                  </div>
+                  <p class="next-match-teams">
+                    {{ summary.spotlightMatch.homeTeam ?? 'TBD' }}
+                    <span class="vs">vs</span>
+                    {{ summary.spotlightMatch.awayTeam ?? 'TBD' }}
+                  </p>
+                  <time class="next-match-date" :datetime="summary.spotlightMatch.scheduledAt">
+                    {{ formatDate(summary.spotlightMatch.scheduledAt) }}
+                  </time>
+                </div>
               </template>
-
-              <p v-if="summary.spotlightMatch.kind !== 'live'" class="next-match-date">
-                {{ formatDate(summary.spotlightMatch.scheduledAt) }}
-              </p>
             </div>
             <p v-else class="empty-note">Planlanmış maç kalmadı.</p>
           </section>
@@ -202,7 +268,10 @@ onMounted(async () => {
         <section class="matches">
           <div class="section-header">
             <h2>Oynanan Maçlar</h2>
-            <span class="section-meta">{{ finishedMatchCount }} / {{ TOURNAMENT_TOTAL_MATCHES }}</span>
+            <span class="section-meta">
+              {{ finishedMatchCount }} / {{ TOURNAMENT_TOTAL_MATCHES }}
+              <span class="section-meta-percent">(%{{ formatPercent(finishedMatchPercent) }})</span>
+            </span>
           </div>
           <p v-if="summary.finishedMatches.length === 0" class="empty-note">Henüz bitmiş maç yok.</p>
           <div v-else class="match-list">
@@ -264,35 +333,74 @@ onMounted(async () => {
 }
 
 .overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: stretch;
 }
 
 .progress-section {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   min-width: 0;
 }
 
-.next-match,
 .spotlight-match {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
 }
 
-.next-match h2,
-.spotlight-match h2 {
-  margin: 0 0 0.75rem;
+.spotlight-live-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.spotlight-live-header h2 {
+  margin: 0;
   font-size: 1.1rem;
+}
+
+.next-match-compact {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.next-match-compact-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 8rem;
+}
+
+.spotlight-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b98a5;
+  font-weight: 600;
+}
+
+.next-match-compact .next-match-teams {
+  flex: 1;
+  min-width: 12rem;
+  margin: 0;
+}
+
+.next-match-compact .next-match-date {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .next-match-card.live {
   border-color: #dc2626;
   box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.25);
+}
+
+.next-match-card.live .next-match-label {
+  margin: 0.25rem 0 0.35rem;
 }
 
 .live-badge {
@@ -324,7 +432,6 @@ onMounted(async () => {
 }
 
 .next-match-card {
-  flex: 1;
   background: #1a2332;
   border: 1px solid #2f3b4d;
   border-radius: 0.75rem;
@@ -432,6 +539,33 @@ onMounted(async () => {
   color: #4ade80;
 }
 
+.progress-pace {
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pace-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.pace-row dt {
+  margin: 0;
+  color: #8b98a5;
+  font-weight: 400;
+}
+
+.pace-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 .matches h2 {
   margin: 0;
   font-size: 1.1rem;
@@ -451,8 +585,12 @@ onMounted(async () => {
   font-variant-numeric: tabular-nums;
 }
 
+.section-meta-percent {
+  margin-left: 0.25rem;
+}
+
 .next-match-label {
-  margin: 0 0 0.35rem;
+  margin: 0;
   font-size: 0.85rem;
   color: #8b98a5;
 }
@@ -461,6 +599,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
+  text-align: center;
 }
 
 .vs {
@@ -470,7 +609,6 @@ onMounted(async () => {
 }
 
 .next-match-date {
-  margin: 0.5rem 0 0;
   color: #8b98a5;
   font-size: 0.9rem;
 }
@@ -571,8 +709,19 @@ onMounted(async () => {
     padding: 1rem 0.75rem 2rem;
   }
 
-  .overview {
+  .progress-section {
     grid-template-columns: 1fr;
+  }
+
+  .next-match-compact {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  .next-match-compact .next-match-teams {
+    font-size: 1rem;
   }
 
   .progress-header {
