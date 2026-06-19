@@ -104,10 +104,6 @@ const requiredAvgYellowCardsPerMatch = computed(() => {
   return remaining / remainingMatchCount.value;
 });
 
-const spotlightTitle = computed(() =>
-  summary.value?.spotlightMatch?.kind === 'live' ? 'Canlı Maç' : 'Sıradaki Maç',
-);
-
 onMounted(async () => {
   try {
     summary.value = await fetchBetProgress();
@@ -199,11 +195,12 @@ onMounted(async () => {
             >
               <template v-if="summary.spotlightMatch.kind === 'live'">
                 <div class="spotlight-live-header">
-                  <h2>{{ spotlightTitle }}</h2>
-                  <span class="live-badge">CANLI</span>
+                  <div class="spotlight-live-header-content">
+                    <span class="live-badge">CANLI</span>
+                    <p class="next-match-label">{{ summary.spotlightMatch.roundLabel ?? 'Maç' }}</p>
+                  </div>
+                  <p class="live-data-note">Veriler güncel olmayabilir. Kontrol ediniz.</p>
                 </div>
-                <p class="next-match-label">{{ summary.spotlightMatch.roundLabel ?? 'Maç' }}</p>
-                <p class="live-data-note">Veriler güncel olmayabilir. Kontrol ediniz.</p>
                 <div class="live-match-body">
                   <div class="match-scoreboard">
                     <div class="team-block">
@@ -247,7 +244,7 @@ onMounted(async () => {
               <template v-else>
                 <div class="next-match-compact">
                   <div class="next-match-compact-meta">
-                    <span class="spotlight-eyebrow">{{ spotlightTitle }}</span>
+                    <span class="spotlight-eyebrow">Sıradaki Maç</span>
                     <span class="next-match-label">{{ summary.spotlightMatch.roundLabel ?? 'Maç' }}</span>
                   </div>
                   <p class="next-match-teams">
@@ -351,9 +348,15 @@ onMounted(async () => {
 
 .spotlight-live-header {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.spotlight-live-header-content {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
 }
 
 .spotlight-live-header h2 {
@@ -399,12 +402,7 @@ onMounted(async () => {
   box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.25);
 }
 
-.next-match-card.live .next-match-label {
-  margin: 0.25rem 0 0.35rem;
-}
-
 .live-badge {
-  margin-left: 0.5rem;
   padding: 0.1rem 0.4rem;
   border-radius: 0.25rem;
   background: #dc2626;
@@ -722,6 +720,14 @@ onMounted(async () => {
 
   .next-match-compact .next-match-teams {
     font-size: 1rem;
+  }
+
+  .spotlight-live-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 0.35rem;
+    gap: 0.35rem;
   }
 
   .progress-header {
