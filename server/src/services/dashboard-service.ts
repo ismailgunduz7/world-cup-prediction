@@ -504,7 +504,7 @@ export async function getDashboardData(userId: string, competitionId: string | n
         });
     })
     .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime())
-    .slice(0, 8);
+    .slice(0, 3);
 
   const userGroupCodes = new Set(
     (selections ?? []).map((s) => (s.team as SelectionTeam).group_code),
