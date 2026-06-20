@@ -279,39 +279,30 @@ onMounted(async () => {
                 </div>
                 <div class="live-match-body">
                   <div class="match-scoreboard">
-                    <div class="team-block">
-                      <span class="team-name">{{ summary.spotlightMatch.homeTeam ?? 'TBD' }}</span>
-                      <span class="team-score">{{ formatLiveStat(summary.spotlightMatch.homeScore) }}</span>
+                    <div class="match-teams-row">
+                      <div class="team-block">
+                        <span class="team-name">{{ summary.spotlightMatch.homeTeam ?? 'TBD' }}</span>
+                        <span class="team-score">{{ formatLiveStat(summary.spotlightMatch.homeScore) }}</span>
+                      </div>
+                      <span class="score-divider">-</span>
+                      <div class="team-block away">
+                        <span class="team-score">{{ formatLiveStat(summary.spotlightMatch.awayScore) }}</span>
+                        <span class="team-name">{{ summary.spotlightMatch.awayTeam ?? 'TBD' }}</span>
+                      </div>
                     </div>
-                    <span class="score-divider">-</span>
-                    <div class="team-block away">
-                      <span class="team-score">{{ formatLiveStat(summary.spotlightMatch.awayScore) }}</span>
-                      <span class="team-name">{{ summary.spotlightMatch.awayTeam ?? 'TBD' }}</span>
-                    </div>
-                    <div class="team-block">
-                      <span class="team-stats">
-                        <span class="stat-pair" title="Korner">
-                          <CornerFlagIcon :size="16" />
-                          {{ formatLiveStat(summary.spotlightMatch.homeCorners) }}
-                        </span>
-                        <span class="stat-pair" title="Sarı kart">
-                          <YellowCardIcon :size="16" />
-                          {{ formatLiveStat(summary.spotlightMatch.homeYellowCards) }}
-                        </span>
+                    <div class="match-stats-row">
+                      <span class="stat-value home">{{ formatLiveStat(summary.spotlightMatch.homeCorners) }}</span>
+                      <span class="stat-icon" title="Korner">
+                        <CornerFlagIcon :size="16" />
                       </span>
+                      <span class="stat-value away">{{ formatLiveStat(summary.spotlightMatch.awayCorners) }}</span>
                     </div>
-                    <div class="score-divider"></div>
-                    <div class="team-block away">
-                      <span class="team-stats">
-                        <span class="stat-pair" title="Korner">
-                          <CornerFlagIcon :size="16" />
-                          {{ formatLiveStat(summary.spotlightMatch.awayCorners) }}
-                        </span>
-                        <span class="stat-pair" title="Sarı kart">
-                          <YellowCardIcon :size="16" />
-                          {{ formatLiveStat(summary.spotlightMatch.awayYellowCards) }}
-                        </span>
+                    <div class="match-stats-row">
+                      <span class="stat-value home">{{ formatLiveStat(summary.spotlightMatch.homeYellowCards) }}</span>
+                      <span class="stat-icon" title="Sarı kart">
+                        <YellowCardIcon :size="16" />
                       </span>
+                      <span class="stat-value away">{{ formatLiveStat(summary.spotlightMatch.awayYellowCards) }}</span>
                     </div>
                   </div>
                 </div>
@@ -354,39 +345,30 @@ onMounted(async () => {
                 <time :datetime="match.scheduledAt">{{ formatDate(match.scheduledAt) }}</time>
               </div>
               <div class="match-scoreboard">
-                <div class="team-block">
-                  <span class="team-name">{{ match.homeTeam ?? 'TBD' }}</span>
-                  <span class="team-score">{{ match.homeScore }}</span>
+                <div class="match-teams-row">
+                  <div class="team-block">
+                    <span class="team-name">{{ match.homeTeam ?? 'TBD' }}</span>
+                    <span class="team-score">{{ match.homeScore }}</span>
+                  </div>
+                  <span class="score-divider">-</span>
+                  <div class="team-block away">
+                    <span class="team-score">{{ match.awayScore }}</span>
+                    <span class="team-name">{{ match.awayTeam ?? 'TBD' }}</span>
+                  </div>
                 </div>
-                <span class="score-divider">-</span>
-                <div class="team-block away">
-                  <span class="team-score">{{ match.awayScore }}</span>
-                  <span class="team-name">{{ match.awayTeam ?? 'TBD' }}</span>
-                </div>
-                <div class="team-block">
-                  <span class="team-stats">
-                    <span class="stat-pair" title="Korner">
-                      <CornerFlagIcon :size="16" />
-                      {{ formatStat(match.homeCorners) }}
-                    </span>
-                    <span class="stat-pair" title="Sarı kart">
-                      <YellowCardIcon :size="16" />
-                      {{ formatStat(match.homeYellowCards) }}
-                    </span>
+                <div class="match-stats-row">
+                  <span class="stat-value home">{{ formatStat(match.homeCorners) }}</span>
+                  <span class="stat-icon" title="Korner">
+                    <CornerFlagIcon :size="16" />
                   </span>
+                  <span class="stat-value away">{{ formatStat(match.awayCorners) }}</span>
                 </div>
-                <div class="score-divider"></div>
-                <div class="team-block away">
-                  <span class="team-stats">
-                    <span class="stat-pair" title="Korner">
-                      <CornerFlagIcon :size="16" />
-                      {{ formatStat(match.awayCorners) }}
-                    </span>
-                    <span class="stat-pair" title="Sarı kart">
-                      <YellowCardIcon :size="16" />
-                      {{ formatStat(match.awayYellowCards) }}
-                    </span>
+                <div class="match-stats-row">
+                  <span class="stat-value home">{{ formatStat(match.homeYellowCards) }}</span>
+                  <span class="stat-icon" title="Sarı kart">
+                    <YellowCardIcon :size="16" />
                   </span>
+                  <span class="stat-value away">{{ formatStat(match.awayYellowCards) }}</span>
                 </div>
               </div>
             </article>
@@ -829,10 +811,40 @@ onMounted(async () => {
 }
 
 .match-scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.match-teams-row,
+.match-stats-row {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 0.5rem;
+}
+
+.match-stats-row {
+  font-size: 0.8rem;
+  color: #8b98a5;
+}
+
+.stat-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.home {
+  text-align: right;
+}
+
+.stat-value.away {
+  text-align: left;
+}
+
+.stat-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .team-block {
@@ -854,25 +866,6 @@ onMounted(async () => {
 .team-score {
   font-size: 1.6rem;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.team-stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.8rem;
-  color: #8b98a5;
-}
-
-.team-block.away .team-stats {
-  justify-content: flex-start;
-}
-
-.stat-pair {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
   font-variant-numeric: tabular-nums;
 }
 
