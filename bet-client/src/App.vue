@@ -138,12 +138,50 @@ onMounted(async () => {
                   <span class="progress-percent">(%{{ summary.progress.corners.toFixed(1) }})</span>
                 </span>
               </div>
-              <div class="progress-track" role="progressbar" :aria-valuenow="summary.progress.corners" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-track-wrap">
+                <div class="progress-tooltip" aria-hidden="true">
+                  <span>Korner: %{{ formatPercent(summary.progress.corners) }}</span>
+                  <span>Maçlar: {{ finishedMatchCount }}/{{ TOURNAMENT_TOTAL_MATCHES }} (%{{ formatPercent(finishedMatchPercent) }})</span>
+                </div>
                 <div
-                  class="progress-fill corners"
-                  :class="{ reached: cornersReached }"
-                  :style="{ width: progressWidth(summary.progress.corners) }"
-                />
+                  class="progress-track"
+                  tabindex="0"
+                  role="progressbar"
+                  :aria-valuenow="summary.progress.corners"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="`Korner %${formatPercent(summary.progress.corners)}, oynanan maçlar %${formatPercent(finishedMatchPercent)}`"
+                >
+                  <div class="progress-track-fills">
+                    <div
+                      class="progress-fill matches"
+                      :style="{ width: progressWidth(finishedMatchPercent) }"
+                      aria-hidden="true"
+                    />
+                    <div
+                      class="progress-fill corners"
+                      :class="{ reached: cornersReached }"
+                      :style="{ width: progressWidth(summary.progress.corners) }"
+                    />
+                  </div>
+                  <div
+                    v-if="finishedMatchPercent > 0 && summary.progress.corners >= finishedMatchPercent"
+                    class="progress-marker"
+                    :style="{ left: progressWidth(finishedMatchPercent) }"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div class="progress-legend">
+                  <span class="legend-item">
+                    <span class="legend-swatch corners" aria-hidden="true" />
+                    Korner
+                  </span>
+                  <span class="legend-item">
+                    <span class="legend-swatch matches" aria-hidden="true" />
+                    Maçlar {{ finishedMatchCount }}/{{ TOURNAMENT_TOTAL_MATCHES }}
+                    <span class="legend-percent">(%{{ formatPercent(finishedMatchPercent) }})</span>
+                  </span>
+                </div>
               </div>
               <p v-if="cornersReached" class="progress-done">Hedef tuttu</p>
               <dl class="progress-pace">
@@ -166,12 +204,50 @@ onMounted(async () => {
                   <span class="progress-percent">(%{{ summary.progress.yellowCards.toFixed(1) }})</span>
                 </span>
               </div>
-              <div class="progress-track" role="progressbar" :aria-valuenow="summary.progress.yellowCards" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-track-wrap">
+                <div class="progress-tooltip" aria-hidden="true">
+                  <span>Sarı kart: %{{ formatPercent(summary.progress.yellowCards) }}</span>
+                  <span>Maçlar: {{ finishedMatchCount }}/{{ TOURNAMENT_TOTAL_MATCHES }} (%{{ formatPercent(finishedMatchPercent) }})</span>
+                </div>
                 <div
-                  class="progress-fill cards"
-                  :class="{ reached: yellowCardsReached }"
-                  :style="{ width: progressWidth(summary.progress.yellowCards) }"
-                />
+                  class="progress-track"
+                  tabindex="0"
+                  role="progressbar"
+                  :aria-valuenow="summary.progress.yellowCards"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="`Sarı kart %${formatPercent(summary.progress.yellowCards)}, oynanan maçlar %${formatPercent(finishedMatchPercent)}`"
+                >
+                  <div class="progress-track-fills">
+                    <div
+                      class="progress-fill matches"
+                      :style="{ width: progressWidth(finishedMatchPercent) }"
+                      aria-hidden="true"
+                    />
+                    <div
+                      class="progress-fill cards"
+                      :class="{ reached: yellowCardsReached }"
+                      :style="{ width: progressWidth(summary.progress.yellowCards) }"
+                    />
+                  </div>
+                  <div
+                    v-if="finishedMatchPercent > 0 && summary.progress.yellowCards >= finishedMatchPercent"
+                    class="progress-marker"
+                    :style="{ left: progressWidth(finishedMatchPercent) }"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div class="progress-legend">
+                  <span class="legend-item">
+                    <span class="legend-swatch cards" aria-hidden="true" />
+                    Sarı kart
+                  </span>
+                  <span class="legend-item">
+                    <span class="legend-swatch matches" aria-hidden="true" />
+                    Maçlar {{ finishedMatchCount }}/{{ TOURNAMENT_TOTAL_MATCHES }}
+                    <span class="legend-percent">(%{{ formatPercent(finishedMatchPercent) }})</span>
+                  </span>
+                </div>
               </div>
               <p v-if="yellowCardsReached" class="progress-done">Hedef tuttu</p>
               <dl class="progress-pace">
@@ -505,26 +581,131 @@ onMounted(async () => {
   margin-left: 0.25rem;
 }
 
+.progress-track-wrap {
+  position: relative;
+}
+
+.progress-track-wrap:hover .progress-tooltip,
+.progress-track-wrap:focus-within .progress-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.progress-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.5rem);
+  transform: translate(-50%, 0.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  background: #0f1419;
+  border: 1px solid #2f3b4d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  font-size: 0.78rem;
+  color: #e2e8f0;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  z-index: 5;
+}
+
+.progress-tooltip span {
+  font-variant-numeric: tabular-nums;
+}
+
 .progress-track {
+  position: relative;
   height: 0.75rem;
+}
+
+.progress-track-fills {
+  position: absolute;
+  inset: 0;
   background: #0f1419;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   border-radius: 999px;
   transition: width 0.4s ease;
   max-width: 100%;
 }
 
+.progress-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: #f8fafc;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(15, 20, 25, 0.65);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.progress-fill.matches {
+  z-index: 1;
+  background: linear-gradient(90deg, #475569, #64748b);
+}
+
 .progress-fill.corners {
+  z-index: 2;
   background: linear-gradient(90deg, #2563eb, #38bdf8);
 }
 
 .progress-fill.cards {
+  z-index: 2;
   background: linear-gradient(90deg, #ca8a04, #facc15);
+}
+
+.progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.45rem;
+  font-size: 0.78rem;
+  color: #8b98a5;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.legend-swatch.corners {
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+}
+
+.legend-swatch.cards {
+  background: linear-gradient(90deg, #ca8a04, #facc15);
+}
+
+.legend-swatch.matches {
+  background: linear-gradient(90deg, #475569, #64748b);
+}
+
+.legend-percent {
+  font-variant-numeric: tabular-nums;
 }
 
 .progress-fill.reached {
