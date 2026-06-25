@@ -1,5 +1,5 @@
 import { supabase } from '../lib/config.js';
-import { clearBestThirdRankings } from './best-third-service.js';
+import { clearBestThirdRankings, getGroupStageAdvancingTeamIds } from './best-third-service.js';
 import { getConfigValue } from './tournament-config.js';
 import { pointsBasisScore } from '../lib/match-basis.js';
 import { STAGE_LABELS } from '../lib/stage-labels.js';
@@ -224,9 +224,10 @@ async function buildKnockoutAdvancementEntries(
     earned_at: string | null;
   }> = [];
 
+  // Eleme turu geçişleri (Son 32 ve sonrası) bitmiş maçlardan üretilen
+  // knockout_advancements satırlarından gelir.
   for (const adv of advancements ?? []) {
-    if (!groupStageCounts && adv.stage === 'group') continue;
-    if (!KNOCKOUT_STAGES.includes(adv.stage as MatchStage) && adv.stage !== 'group') continue;
+    if (!KNOCKOUT_STAGES.includes(adv.stage as MatchStage)) continue;
 
     const team = teamMap.get(adv.team_id);
     if (!team) continue;
@@ -241,6 +242,29 @@ async function buildKnockoutAdvancementEntries(
       description_tr: `${STAGE_LABELS[adv.stage as MatchStage]} geçişi`,
       earned_at: adv.advanced_at,
     });
+  }
+
+  // Grup aşaması tur atlama puanı ayar açıkken Son 32'ye yükselen 32 takıma
+  // verilir. Bu puanlar tek tek grup finalize'ında değil, ancak tüm gruplar
+  // finalize edilip en iyi 8 üçüncü kesinleştiğinde topluca dağıtılır
+  // (getGroupStageAdvancingTeamIds bu koşul sağlanmadan boş set döner).
+  if (groupStageCounts) {
+    const advancingTeamIds = await getGroupStageAdvancingTeamIds();
+    for (const teamId of advancingTeamIds) {
+      const team = teamMap.get(teamId);
+      if (!team) continue;
+
+      const points = getRulePoints(ruleMap, advanceId, team.tier_id);
+      entries.push({
+        team_id: team.id,
+        rule_type_id: advanceId,
+        match_id: null,
+        source_key: `advance:group:${team.id}`,
+        points,
+        description_tr: `${STAGE_LABELS.group} geçişi`,
+        earned_at: null,
+      });
+    }
   }
 
   return entries;

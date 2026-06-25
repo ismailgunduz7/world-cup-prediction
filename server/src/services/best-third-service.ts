@@ -216,6 +216,37 @@ export async function getBestThirdAdvancingTeamIds(): Promise<Set<number>> {
   return new Set(summary.rows.filter((row) => row.isAdvancing).map((row) => row.teamId));
 }
 
+/**
+ * Son 32'ye yükselen 32 takımın id'lerini döndürür (12 grup birincisi + 12 grup
+ * ikincisi + en iyi 8 üçüncü). Tur atlama puanı yalnızca tüm Son 32 kesinleştikten
+ * sonra topluca verildiği için, set yalnızca bütün gruplar finalize edildiğinde VE
+ * en iyi 3.ler hesaplandığında dolu döner; aksi halde boş set döner.
+ */
+export async function getGroupStageAdvancingTeamIds(): Promise<Set<number>> {
+  if (!(await allGroupsFinalized())) return new Set();
+
+  const advancingThirds = await getBestThirdAdvancingTeamIds();
+  if (advancingThirds.size === 0) return new Set();
+
+  const { data: standings, error } = await supabase
+    .from('group_standings')
+    .select('team_id, rank, is_finalized')
+    .eq('is_finalized', true);
+
+  if (error) throw error;
+
+  const ids = new Set<number>();
+  for (const standing of standings ?? []) {
+    if (standing.rank === 1 || standing.rank === 2) {
+      ids.add(standing.team_id);
+    } else if (standing.rank === 3 && advancingThirds.has(standing.team_id)) {
+      ids.add(standing.team_id);
+    }
+  }
+
+  return ids;
+}
+
 export async function maybeAutoComputeBestThirdRankings(): Promise<boolean> {
   if (!(await allGroupsFinalized())) return false;
   if (await isBestThirdRankManual()) return false;
