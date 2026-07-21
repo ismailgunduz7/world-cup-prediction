@@ -18,6 +18,7 @@ import matchesRoutes from './routes/matches.js';
 import { getSelectionLockAt, hasTournamentStarted, areSelectionsLocked } from './services/tournament-config.js';
 import { isRandomModeEnabledForUser } from './services/random-mode-service.js';
 import { optionalAuthMiddleware, type AppVariables } from './middleware/auth.js';
+import { shutdownMiddleware } from './middleware/shutdown.js';
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -30,6 +31,9 @@ app.use(
     credentials: true,
   }),
 );
+
+// Turnuva bitti: hiçbir API isteğini işleme; Vercel projesi silinmeden trafiği kes.
+app.use('*', shutdownMiddleware);
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }));
 
