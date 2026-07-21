@@ -3,9 +3,10 @@ import { computed, onMounted, ref } from 'vue';
 import Card from 'primevue/card';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
+import Tag from 'primevue/tag';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
-import { useReferenceStore } from '@/stores/reference';
+import { useReferenceStore, type ReferenceGroup, type ReferenceTier } from '@/stores/reference';
 
 type RuleRow = {
   id: number;
@@ -42,13 +43,28 @@ const scoringFlags = ref({
   group_stage_counts_as_round_advancement: false,
   knockout_result_over_120: false,
 });
+const teamTiers = ref<ReferenceTier[]>([]);
+const teamGroups = ref<ReferenceGroup[]>([]);
 
 onMounted(async () => {
-  const data = await reference.ensureScoringRules();
-  rules.value = data.rules;
-  scoringFlags.value = data.scoringFlags;
+  const [rulesData, teamsData] = await Promise.all([
+    reference.ensureScoringRules(),
+    reference.ensureTeams(),
+  ]);
+  rules.value = rulesData.rules;
+  scoringFlags.value = rulesData.scoringFlags;
+  teamTiers.value = teamsData.tiers;
+  teamGroups.value = teamsData.groups;
   loading.value = false;
 });
+
+// Tier başına o tier'daki takımlar (isme göre sıralı).
+function teamsByTier(tierId: number) {
+  return teamGroups.value
+    .flatMap((g) => g.teams)
+    .filter((t) => t.tier?.id === tierId)
+    .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+}
 
 const tierColumns = computed<TierColumn[]>(() => {
   const map = new Map<number, TierColumn>();
@@ -196,6 +212,28 @@ function pointsClass(value: number) {
         </DataTable>
       </template>
     </Card>
+
+    <Card class="tier-teams-card">
+      <template #title>Takımların Tier Dağılımı</template>
+      <template #content>
+        <div class="tier-grid">
+          <div v-for="tier in teamTiers" :key="tier.id" class="tier-block">
+            <h3 class="tier-title">{{ tier.name }}</h3>
+            <ul class="team-list">
+              <li v-for="team in teamsByTier(tier.id)" :key="team.id" class="team-row">
+                <RouterLink
+                  :to="{ name: 'team-matches', params: { id: team.id }, query: { from: 'rules' } }"
+                  class="team-link"
+                >
+                  {{ team.name }}
+                </RouterLink>
+                <Tag :value="`Grup ${team.groupCode}`" severity="secondary" class="team-group-tag" />
+              </li>
+            </ul>
+          </div>
+        </div>
+      </template>
+    </Card>
   </div>
 </template>
 
@@ -241,5 +279,66 @@ function pointsClass(value: number) {
   margin: 0.9rem 0 0;
   font-size: 0.88rem;
   color: var(--color-text-muted);
+}
+
+.tier-teams-card :deep(.p-card-title) {
+  font-size: 1rem;
+}
+
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.tier-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.team-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.team-link {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.team-link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+.team-group-tag {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 900px) {
+  .tier-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .tier-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

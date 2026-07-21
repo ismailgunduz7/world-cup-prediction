@@ -77,12 +77,5 @@ export const useReferenceStore = defineStore('reference', () => {
     return scoringRulesInflight;
   }
 
-  function reset() {
-    teams.value = null;
-    scoringRules.value = null;
-    teamsInflight = null;
-    scoringRulesInflight = null;
-  }
-
-  return { teams, scoringRules, ensureTeams, ensureScoringRules, reset };
+  return { teams, scoringRules, ensureTeams, ensureScoringRules };
 });

@@ -1,6 +1,2 @@
-# API'yi aynı origin üzerinden backend'e proxy'le (first-party cookie için).
-# Bu kural SPA catch-all'dan ÖNCE gelmeli.
-/api/*  https://world-cup-prediction-server.vercel.app/api/:splat  200
-
-# SPA fallback: diğer tüm yollar index.html'e (Vue Router devralır).
-/*      /index.html                                                200
+# Statik site: backend yok. Tüm yollar index.html'e (Vue Router devralır).
+/*      /index.html      200

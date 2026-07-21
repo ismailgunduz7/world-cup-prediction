@@ -47,10 +47,6 @@ function groupTeamsFor(team: LeaderboardSelection | null) {
   return (group?.teams ?? []).map((t) => ({ id: t.id, name: t.name }));
 }
 
-function rowClass(data: PlayerLeaderboardEntry) {
-  return data.isCurrentUser ? 'row-highlight' : '';
-}
-
 function onRowClick(event: { data: PlayerLeaderboardEntry }) {
   emit('select', event.data);
 }
@@ -60,7 +56,6 @@ function onRowClick(event: { data: PlayerLeaderboardEntry }) {
   <DataTable
     :value="entries"
     striped-rows
-    :row-class="rowClass"
     responsive-layout="scroll"
     class="players-table"
     @row-click="onRowClick"

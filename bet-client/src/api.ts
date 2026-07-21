@@ -1,11 +1,6 @@
-import axios from 'axios';
-
-export const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
-
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-});
+// Turnuva bittikten sonra veri statiktir: bet özeti export edilmiş
+// public/data/bet-progress.json dosyasından okunur (backend yok).
+const BASE = import.meta.env.BASE_URL || '/';
 
 export type BetProgressSpotlightMatch = {
   kind: 'live' | 'scheduled';
@@ -41,6 +36,7 @@ export type BetProgressSummary = {
 };
 
 export async function fetchBetProgress(): Promise<BetProgressSummary> {
-  const { data } = await api.get<BetProgressSummary>('/bet-progress');
-  return data;
+  const res = await fetch(`${BASE}data/bet-progress.json`, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('Bet verisi bulunamadı');
+  return (await res.json()) as BetProgressSummary;
 }

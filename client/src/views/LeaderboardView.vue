@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Card from 'primevue/card';
 import DataTable from 'primevue/datatable';
@@ -10,10 +10,12 @@ import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import PlayerLeaderboardTable from '@/components/PlayerLeaderboardTable.vue';
 import TabBar from '@/components/TabBar.vue';
+import TeamSelectorsChip, { type SelectorGroup } from '@/components/TeamSelectorsChip.vue';
 import { rankLabel, type PlayerLeaderboardEntry } from '@/utils/leaderboard';
 import api from '@/api/client';
 
-type LeaderboardTab = 'players' | 'teams' | 'groups' | 'random';
+// Her yarışma kendi sekmesidir (`comp:<id>`); ayrıca global takım ve grup sekmeleri.
+type LeaderboardTab = string;
 
 type GroupStandingRow = {
   rank: number;
@@ -60,14 +62,6 @@ type GroupStandings = {
   standings: GroupStandingRow[];
 };
 
-const tabs: { key: LeaderboardTab; label: string }[] = [
-  { key: 'players', label: 'Oyuncular' },
-  { key: 'teams', label: 'Takımlar' },
-  { key: 'groups', label: 'Grup Puanları' },
-];
-
-const randomTab = { key: 'random' as const, label: 'Rastgele' };
-
 type TeamEntry = {
   rank: number;
   teamId: number;
@@ -78,53 +72,110 @@ type TeamEntry = {
   isUserSelection: boolean;
 };
 
+type CompetitionBlock = {
+  id: string;
+  name: string;
+  randomModeEnabled: boolean;
+  entries: PlayerLeaderboardEntry[];
+  randomEntries: PlayerLeaderboardEntry[];
+};
+
 const toast = useToast();
 const route = useRoute();
 const router = useRouter();
 const loading = ref(true);
-const randomModeEnabled = ref(false);
-const activeTab = ref<LeaderboardTab>('players');
-const entries = ref<PlayerLeaderboardEntry[]>([]);
-const randomEntries = ref<PlayerLeaderboardEntry[]>([]);
+const activeTab = ref<LeaderboardTab>('teams');
+const competitions = ref<CompetitionBlock[]>([]);
 const teamStandings = ref<TeamEntry[]>([]);
 const groupStandings = ref<GroupStandings[]>([]);
 const bestThirds = ref<BestThirdSummary | null>(null);
 
-const visibleTabs = computed(() =>
-  randomModeEnabled.value ? [...tabs, randomTab] : tabs,
-);
+// Her yarışma kendi sekmesi; rastgele mod açıksa ayrı bir "… - Rastgele"
+// sekmesi; ardından global takım ve grup sekmeleri.
+const visibleTabs = computed(() => [
+  ...competitions.value.flatMap((c) => {
+    const items = [{ key: `comp:${c.id}`, label: c.name }];
+    if (c.randomModeEnabled && c.randomEntries.length) {
+      items.push({ key: `rand:${c.id}`, label: `${c.name} - Rastgele` });
+    }
+    return items;
+  }),
+  { key: 'teams', label: 'Takımlar' },
+  { key: 'groups', label: 'Grup Puanları' },
+]);
+
+function isKnownTab(key: string): boolean {
+  if (key === 'teams' || key === 'groups') return true;
+  const m = key.match(/^(?:comp|rand):(.+)$/);
+  return !!m && competitions.value.some((c) => c.id === m[1]);
+}
 
 function resolveInitialTab(): LeaderboardTab {
+  // `?tab=<key>` aktif sekmeyi taşır (teams | groups | comp:<id> | rand:<id>);
+  // geri-navigasyon ve paylaşılabilir link için.
   const tab = route.query.tab;
-  if (tab === 'teams') return 'teams';
-  if (tab === 'groups') return 'groups';
-  if (tab === 'random' && randomModeEnabled.value) return 'random';
-  return 'players';
+  if (typeof tab === 'string' && isKnownTab(tab)) return tab;
+  return competitions.value[0] ? `comp:${competitions.value[0].id}` : 'teams';
 }
 
 onMounted(async () => {
-  const [{ data: leaderboardData }, { data: groupsData }, { data: bestThirdData }, { data: statusData }] =
-    await Promise.all([
-      api.get('/leaderboard'),
-      api.get('/groups/standings'),
-      api.get('/groups/best-thirds'),
-      api.get('/tournament/status'),
-    ]);
+  const [{ data: leaderboardData }, { data: groupsData }, { data: bestThirdData }] = await Promise.all([
+    api.get('/leaderboard'),
+    api.get('/groups/standings'),
+    api.get('/groups/best-thirds'),
+  ]);
 
-  entries.value = leaderboardData.entries;
+  competitions.value = leaderboardData.competitions;
   teamStandings.value = leaderboardData.teamStandings;
   groupStandings.value = groupsData.groups;
   bestThirds.value = bestThirdData.bestThirds;
-  randomModeEnabled.value = statusData.randomModeEnabled !== false;
-
-  if (randomModeEnabled.value) {
-    const { data } = await api.get('/random-mode/leaderboard');
-    randomEntries.value = data.entries;
-  }
 
   activeTab.value = resolveInitialTab();
   loading.value = false;
 });
+
+// Aktif sekmeyi URL'ye yansıt ki takım/oyuncu sayfasından "Geri" dönünce aynı
+// sekme açılsın (aksi halde daima ilk yarışma sekmesine düşüyordu).
+watch(activeTab, (tab) => {
+  if (!tab || loading.value) return;
+  if (route.query.tab === tab) return;
+  router.replace({ query: { ...route.query, tab } });
+});
+
+// Takım id → o takımı seçen oyuncular (yarışma bazında). `pick` gerçek seçimleri
+// (comp.entries), random atamaları (comp.randomEntries) haritalayabilir.
+function buildSelectorsMap(pick: (comp: CompetitionBlock) => PlayerLeaderboardEntry[]) {
+  const map = new Map<number, SelectorGroup[]>();
+  for (const comp of competitions.value) {
+    for (const entry of pick(comp)) {
+      for (const sel of entry.selections) {
+        let groups = map.get(sel.teamId);
+        if (!groups) {
+          groups = [];
+          map.set(sel.teamId, groups);
+        }
+        let group = groups.find((g) => g.competitionName === comp.name);
+        if (!group) {
+          group = { competitionName: comp.name, players: [] };
+          groups.push(group);
+        }
+        group.players.push(entry.displayName);
+      }
+    }
+  }
+  return map;
+}
+
+const selectorsByTeam = computed(() => buildSelectorsMap((c) => c.entries));
+const randomSelectorsByTeam = computed(() => buildSelectorsMap((c) => c.randomEntries));
+
+function teamSelectors(teamId: number): SelectorGroup[] {
+  return selectorsByTeam.value.get(teamId) ?? [];
+}
+
+function teamRandomSelectors(teamId: number): SelectorGroup[] {
+  return randomSelectorsByTeam.value.get(teamId) ?? [];
+}
 
 function teamRowClass(data: TeamEntry) {
   return data.isUserSelection ? 'row-highlight' : '';
@@ -155,7 +206,7 @@ function onGroupTeamClick(teamId: number) {
   router.push({
     name: 'team-matches',
     params: { id: teamId },
-    query: { from: 'leaderboard' },
+    query: { from: 'leaderboard', tab: activeTab.value },
   });
 }
 
@@ -163,7 +214,7 @@ function onTeamRowClick(event: { data: TeamEntry }) {
   router.push({
     name: 'team-matches',
     params: { id: event.data.teamId },
-    query: { from: 'leaderboard' },
+    query: { from: 'leaderboard', tab: activeTab.value },
   });
 }
 
@@ -180,8 +231,8 @@ function onPlayerSelect(entry: PlayerLeaderboardEntry) {
 
   router.push({
     name: 'player-points',
-    params: { id: entry.username },
-    query: { from: 'leaderboard' },
+    params: { id: entry.slug },
+    query: { from: 'leaderboard', tab: activeTab.value },
   });
 }
 
@@ -198,8 +249,8 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
 
   router.push({
     name: 'player-points',
-    params: { id: entry.username },
-    query: { from: 'random-leaderboard', mode: 'random' },
+    params: { id: entry.slug },
+    query: { from: 'random-leaderboard', mode: 'random', tab: activeTab.value },
   });
 }
 </script>
@@ -213,18 +264,29 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
       <template #content>
         <TabBar v-model="activeTab" :tabs="visibleTabs" aria-label="Puan durumu sekmeleri" />
 
-        <div v-show="activeTab === 'players'" class="leaderboard-tab-panel" role="tabpanel">
-          <PlayerLeaderboardTable :entries="entries" @select="onPlayerSelect" />
-        </div>
+        <template v-for="comp in competitions" :key="comp.id">
+          <div
+            v-show="activeTab === `comp:${comp.id}`"
+            class="leaderboard-tab-panel"
+            role="tabpanel"
+          >
+            <PlayerLeaderboardTable :entries="comp.entries" @select="onPlayerSelect" />
+          </div>
 
-        <div v-show="activeTab === 'random'" class="leaderboard-tab-panel" role="tabpanel">
-          <PlayerLeaderboardTable
-            :entries="randomEntries"
-            empty-selections-label="Atama yapılmadı"
-            team-link-from="random-leaderboard"
-            @select="onRandomPlayerSelect"
-          />
-        </div>
+          <div
+            v-if="comp.randomModeEnabled && comp.randomEntries.length"
+            v-show="activeTab === `rand:${comp.id}`"
+            class="leaderboard-tab-panel"
+            role="tabpanel"
+          >
+            <PlayerLeaderboardTable
+              :entries="comp.randomEntries"
+              empty-selections-label="Atama yapılmadı"
+              team-link-from="random-leaderboard"
+              @select="onRandomPlayerSelect"
+            />
+          </div>
+        </template>
 
         <div v-show="activeTab === 'teams'" class="leaderboard-tab-panel" role="tabpanel">
           <DataTable
@@ -242,7 +304,18 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
             </Column>
             <Column field="name" header="Takım">
               <template #body="{ data }">
-                <span class="name-cell">{{ data.name }}</span>
+                <span class="team-name-cell">
+                  <span class="name-cell">{{ data.name }}</span>
+                  <TeamSelectorsChip
+                    v-if="teamSelectors(data.teamId).length"
+                    :groups="teamSelectors(data.teamId)"
+                  />
+                  <TeamSelectorsChip
+                    v-if="teamRandomSelectors(data.teamId).length"
+                    :groups="teamRandomSelectors(data.teamId)"
+                    variant="random"
+                  />
+                </span>
               </template>
             </Column>
             <Column header="Tier" style="width: 8rem">
@@ -362,6 +435,7 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
   padding-top: 0.25rem;
 }
 
+
 .rank-cell {
   font-weight: 600;
   min-width: 2rem;
@@ -371,6 +445,12 @@ function onRandomPlayerSelect(entry: PlayerLeaderboardEntry) {
 
 .name-cell {
   font-weight: 500;
+}
+
+.team-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .ml-2 {

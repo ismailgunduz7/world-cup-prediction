@@ -64,10 +64,6 @@ const openPanels = ref<string[]>([]);
 
 const isRandomMode = route.query.mode === 'random';
 
-const backRoutes: Record<string, string> = {
-  leaderboard: '/puan-durumu',
-  'random-leaderboard': '/puan-durumu?tab=random',
-};
 
 const stageLabels: Record<string, string> = {
   group: 'Grup',
@@ -125,8 +121,11 @@ function pointsSeverity(points: number): 'success' | 'danger' {
 
 function goBack() {
   const from = route.query.from;
-  if (typeof from === 'string' && backRoutes[from]) {
-    router.push(backRoutes[from]);
+  // Puan durumundan gelindiyse aynı sekmeye (`tab` query'si) geri dön.
+  if (from === 'leaderboard' || from === 'random-leaderboard') {
+    const tab = route.query.tab;
+    if (typeof tab === 'string') router.push({ path: '/puan-durumu', query: { tab } });
+    else router.back();
     return;
   }
   router.back();
@@ -136,7 +135,11 @@ function goToTeam(teamId: number) {
   router.push({
     name: 'team-matches',
     params: { id: teamId },
-    query: { from: isRandomMode ? 'random-leaderboard' : 'leaderboard' },
+    // Takım sayfasından "Geri" yine puan durumuna, geldiğimiz sekmeye dönsün.
+    query: {
+      from: isRandomMode ? 'random-leaderboard' : 'leaderboard',
+      ...(typeof route.query.tab === 'string' ? { tab: route.query.tab } : {}),
+    },
   });
 }
 </script>

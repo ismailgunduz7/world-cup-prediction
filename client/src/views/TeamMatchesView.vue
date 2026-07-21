@@ -13,9 +13,11 @@ import Column from 'primevue/column';
 import PageHeader from '@/components/PageHeader.vue';
 import LoadingState from '@/components/LoadingState.vue';
 import Message from 'primevue/message';
+import TeamSelectorsChip from '@/components/TeamSelectorsChip.vue';
 import api from '@/api/client';
 import { formatRuleDescription, formatSigned } from '@/utils/point-descriptions';
 import { formatMatchScore, type MatchScoreFields } from '@/utils/match-score';
+import { teamSelectorGroups, type CompetitionLeaderboard, type SelectorGroup } from '@/utils/leaderboard';
 
 type PointEntry = {
   description: string;
@@ -33,13 +35,12 @@ const matches = ref<Array<Record<string, unknown>>>([]);
 const bonusEntries = ref<PointEntry[]>([]);
 const totalPoints = ref(0);
 const openMatch = ref<string[]>([]);
+const realSelectors = ref<SelectorGroup[]>([]);
+const randomSelectors = ref<SelectorGroup[]>([]);
 
 const backRoutes: Record<string, string> = {
-  leaderboard: '/puan-durumu',
-  'random-leaderboard': '/puan-durumu?tab=random',
-  'random-mode': '/rastgele',
   fixtures: '/fikstur',
-  selections: '/secimlerim',
+  rules: '/kurallar',
   home: '/',
 };
 
@@ -71,11 +72,17 @@ const statusSeverity: Record<string, 'secondary' | 'success' | 'warn' | 'info' |
 
 onMounted(async () => {
   try {
-    const { data } = await api.get(`/teams/${route.params.id}/matches`);
+    const teamId = Number(route.params.id);
+    const [{ data }, { data: leaderboard }] = await Promise.all([
+      api.get(`/teams/${route.params.id}/matches`),
+      api.get<{ competitions: CompetitionLeaderboard[] }>('/leaderboard'),
+    ]);
     team.value = data.team;
     matches.value = data.matches;
     bonusEntries.value = data.bonusEntries ?? [];
     totalPoints.value = data.totalPoints;
+    realSelectors.value = teamSelectorGroups(leaderboard.competitions, teamId, 'real');
+    randomSelectors.value = teamSelectorGroups(leaderboard.competitions, teamId, 'random');
   } catch (err: unknown) {
     loadError.value =
       (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -120,6 +127,13 @@ function isFinished(match: Record<string, unknown>) {
 
 function goBack() {
   const from = route.query.from;
+  // Puan durumundan gelindiyse aynı sekmeye (`tab` query'si) geri dön.
+  if (from === 'leaderboard' || from === 'random-leaderboard') {
+    const tab = route.query.tab;
+    if (typeof tab === 'string') router.push({ path: '/puan-durumu', query: { tab } });
+    else router.back();
+    return;
+  }
   if (typeof from === 'string' && backRoutes[from]) {
     router.push(backRoutes[from]);
     return;
@@ -149,6 +163,12 @@ function goBack() {
           <Tag v-if="team.tierName" :value="team.tierName" />
           <Tag :value="`Grup ${team.groupCode}`" severity="secondary" />
           <Tag :value="`${totalPoints} puan`" :severity="pointsSeverity(totalPoints)" />
+        </div>
+
+        <div v-if="realSelectors.length || randomSelectors.length" class="selectors-row">
+          <span class="selectors-label text-muted">Bu takımı seçenler</span>
+          <TeamSelectorsChip v-if="realSelectors.length" :groups="realSelectors" />
+          <TeamSelectorsChip v-if="randomSelectors.length" :groups="randomSelectors" variant="random" />
         </div>
       </template>
     </Card>
@@ -230,6 +250,19 @@ function goBack() {
 <style scoped>
 .page-top {
   margin-bottom: -0.5rem;
+}
+
+.selectors-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.selectors-label {
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .match-header {

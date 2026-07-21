@@ -1,87 +1,71 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+/**
+ * Statik veri çözücü (backend'siz mod).
+ *
+ * Turnuva bittikten sonra site tamamen statiktir: gerçek bir API yoktur.
+ * Bu modül eski `api.get(...)` çağrılarını, `public/data/*.json` içine
+ * export edilmiş anlık görüntülere eşler. Böylece view'lar büyük ölçüde
+ * değişmeden çalışır. Kimlik doğrulama, token ve cookie mantığı kaldırıldı.
+ *
+ * Veriyi yeniden üretmek için:  npm run export-static -w server
+ */
 
-/** Dev: `/api` (Vite proxy). Prod: `VITE_API_URL` ile tam backend adresi. */
-export const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+const BASE = import.meta.env.BASE_URL || '/';
 
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-  // Send the httpOnly refresh-token cookie with requests.
-  withCredentials: true,
-});
+type ResolverConfig = { params?: Record<string, unknown> };
+// axios gibi: tür verilmezse `data` any olur (mevcut view'lar tür belirtmiyor).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ResolverResponse<T = any> = { data: T };
 
-// The access token lives only in memory: it is never written to localStorage,
-// so it isn't exposed to XSS-readable storage. The refresh token is an
-// httpOnly cookie the JS never sees. On reload the access token is gone and is
-// transparently re-minted from the refresh cookie (see auth store initialize).
-let accessToken: string | null = null;
-
-export function setAccessToken(token: string | null) {
-  accessToken = token;
+/** axios hata biçimini taklit eder ki view'lardaki `err.response.data.error` çalışsın. */
+function notFound(status: number): never {
+  throw { response: { status, data: { error: 'Veri bulunamadı' } } };
 }
 
-export function clearAccessToken() {
-  accessToken = null;
+async function loadJson<T = unknown>(file: string): Promise<T> {
+  const res = await fetch(`${BASE}data/${file}.json`, { cache: 'no-cache' });
+  if (!res.ok) notFound(res.status);
+  return (await res.json()) as T;
 }
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function get<T = any>(url: string, config?: ResolverConfig): Promise<ResolverResponse<T>> {
+  const [path, qs] = url.split('?');
+  const query = new URLSearchParams(qs ?? '');
+  const mode = (config?.params?.mode as string | undefined) ?? query.get('mode') ?? undefined;
+
+  switch (path) {
+    case '/tournament/status':
+      return { data: await loadJson('tournament-status') };
+    case '/teams':
+      return { data: await loadJson('teams') };
+    case '/scoring-rules':
+      return { data: await loadJson('scoring-rules') };
+    case '/matches':
+      return { data: await loadJson('matches') };
+    case '/leaderboard':
+      return { data: await loadJson('leaderboard') };
+    case '/groups/standings': {
+      const groups = await loadJson<{ groups: unknown }>('groups');
+      return { data: { groups: groups.groups } as T };
+    }
+    case '/groups/best-thirds': {
+      const groups = await loadJson<{ bestThirds: unknown }>('groups');
+      return { data: { bestThirds: groups.bestThirds } as T };
+    }
   }
-  return config;
-});
 
-type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+  let m: RegExpMatchArray | null;
+  if ((m = path.match(/^\/players\/([^/]+)\/points$/))) {
+    const slug = decodeURIComponent(m[1]);
+    return { data: await loadJson(mode === 'random' ? `players/${slug}.random` : `players/${slug}`) };
+  }
+  if ((m = path.match(/^\/teams\/([^/]+)\/matches$/))) {
+    return { data: await loadJson(`teams/${m[1]}`) };
+  }
 
-let isRefreshing = false;
-let pendingRequests: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+  throw new Error(`Statik veri eşlemesi bulunamadı: ${url}`);
+}
 
-api.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const original = error.config as RetriableConfig | undefined;
-    // Don't try to refresh on auth endpoints, on non-401s, or on a request we
-    // already retried once (prevents an infinite refresh loop).
-    if (!original || error.response?.status !== 401 || original.url?.includes('/auth/') || original._retry) {
-      return Promise.reject(error);
-    }
-
-    original._retry = true;
-
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        pendingRequests.push({
-          resolve: (token: string) => {
-            original.headers.Authorization = `Bearer ${token}`;
-            resolve(api(original));
-          },
-          reject,
-        });
-      });
-    }
-
-    isRefreshing = true;
-
-    try {
-      // The refresh token rides along as an httpOnly cookie.
-      const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true });
-      setAccessToken(data.accessToken);
-      pendingRequests.forEach((cb) => cb.resolve(data.accessToken));
-      pendingRequests = [];
-      original.headers.Authorization = `Bearer ${data.accessToken}`;
-      return api(original);
-    } catch (refreshError) {
-      pendingRequests.forEach((cb) => cb.reject(refreshError));
-      pendingRequests = [];
-      clearAccessToken();
-      window.location.href = '/giris';
-      return Promise.reject(error);
-    } finally {
-      isRefreshing = false;
-    }
-  },
-);
+const api = { get };
 
 export default api;
-
-export const ADMIN_PATH = import.meta.env.VITE_ADMIN_PATH || 'internal-console-7k9m2';

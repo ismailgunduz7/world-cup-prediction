@@ -1,28 +1,16 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath, URL } from 'node:url';
 
-const clientRoot = fileURLToPath(new URL('.', import.meta.url));
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, clientRoot, '');
-  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:3001';
-
-  return {
-    plugins: [vue()],
-    resolve: {
-      alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url)),
-      },
+// Statik site: backend/proxy yok. Veri public/data/*.json'dan okunur.
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
-    server: {
-      port: 5173,
-      proxy: {
-        '/api': {
-          target: apiProxyTarget,
-          changeOrigin: true,
-        },
-      },
-    },
-  };
+  },
+  server: {
+    port: 5173,
+  },
 });
